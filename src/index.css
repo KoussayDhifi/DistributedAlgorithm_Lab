@@ -1,0 +1,6 @@
+html,body,#root{height:100%;margin:0}
+body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+.app{height:100vh;display:flex;flex-direction:column}
+.content{display:flex;gap:12px;padding:12px;flex:1}
+.left{width:360px}
+.right{flex:1}

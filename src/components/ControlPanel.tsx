@@ -1,0 +1,73 @@
+import React from 'react'
+import { Button, Stack, Title, Group, Select, Slider, Switch, NumberInput } from '@mantine/core'
+
+type Props = {
+  onStart: () => void
+  onStop: () => void
+  onRequestCS: () => void
+  onPassToken: () => void
+  onStep: () => void
+  processes: number[]
+  selectedProcess: number
+  setSelectedProcess: (id: number) => void
+  autoRun: boolean
+  setAutoRun: (v: boolean) => void
+  speed: number
+  setSpeed: (v: number) => void
+  algorithm: string
+  setAlgorithm: (a: string) => void
+  numberOfProcesses: number
+  setNumberOfProcesses: (n: number) => void
+}
+
+export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
+
+  return (
+    <Stack>
+      <Title order={4}>Controls</Title>
+      <Group>
+        <Button color="green" onClick={onStart}>Start</Button>
+        <Button color="red" onClick={onStop}>Stop</Button>
+      </Group>
+      <Select
+        label="Algorithm"
+        value={algorithm}
+        onChange={(v) => setAlgorithm(String(v))}
+        data={[
+          { value: 'ricart', label: 'Ricart–Agrawala' },
+          { value: 'token', label: 'Token Ring' },
+          { value: 'bully', label: 'Bully Election' },
+          { value: 'ring', label: 'Ring Election' },
+        ]}
+      />
+      <NumberInput
+        label="Processes"
+        value={numberOfProcesses}
+        min={1}
+        max={50}
+        onChange={(v) => setNumberOfProcesses(v || 1)}
+      />
+      <Select
+        label="Requester"
+        value={String(selectedProcess)}
+        onChange={(v) => setSelectedProcess(Number(v))}
+        data={processes.map((p) => ({ value: String(p), label: `Process ${p}` }))}
+      />
+      <Group spacing="xs" align="center">
+        <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
+      </Group>
+      <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
+
+      {/* Conditional action button based on selected algorithm */}
+      {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart–Agrawala)</Button>}
+      {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
+      {(algorithm === 'bully' || algorithm === 'ring') && (
+        <Button onClick={onStep}>Run {algorithm === 'bully' ? 'Bully' : 'Ring'} Election (step)</Button>
+      )}
+
+      <Group>
+        <Button onClick={onStep}>Step</Button>
+      </Group>
+    </Stack>
+  )
+}
