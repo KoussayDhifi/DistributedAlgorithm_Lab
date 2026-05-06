@@ -9,6 +9,7 @@ function colorFor(m: MessageStep) {
   if (t.includes('ELECTION')) return 'orange'
   if (t.includes('OK')) return 'green'
   if (t.includes('COORD')) return 'purple'
+  if (t.includes('TOKEN')) return 'orange'
   return '#333'
 }
 
@@ -344,13 +345,20 @@ function NetworkCanvas() {
         {nodes.map(n => {
           const pos = positions.get(n.id)
           if (!pos) return null
-          const isLeader = n.color === 'purple'
+          
+          // use the color assigned by the algorithm (e.g. purple for leader, orange for token holder)
+          // Default to white fill with blue stroke
+          const isHighlight = n.color && n.color !== 'skyblue' && n.color !== '#fff'
+          const fill = isHighlight ? n.color : '#fff'
+          const stroke = isHighlight ? '#333' : '#4dabf7'
+          const textColor = isHighlight ? '#fff' : '#000'
+
           return (
             <g key={n.id} transform={`translate(${pos.x}, ${pos.y})`}>
               <circle
                 r={20}
-                fill={isLeader ? 'purple' : '#fff'}
-                stroke={isLeader ? '#333' : '#4dabf7'}
+                fill={fill}
+                stroke={stroke}
                 strokeWidth={3}
               />
               <text
@@ -358,7 +366,7 @@ function NetworkCanvas() {
                 fontSize={14}
                 fontWeight={700}
                 textAnchor="middle"
-                fill={isLeader ? '#fff' : '#000'}
+                fill={textColor}
               >
                 {n.label ?? `P${n.id}`}
               </text>
@@ -373,7 +381,7 @@ function NetworkCanvas() {
 export default function GraphCanvas() {
   const { state } = useSim()
 
-  if (state.algorithm === 'bully') {
+  if (state.algorithm === 'bully' || state.algorithm === 'token') {
     return <NetworkCanvas />
   }
 
