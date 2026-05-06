@@ -22,6 +22,7 @@ export default function App() {
   const simRef = useRef<Simulator | null>(null)
   const raInstances = useRef<any>(null)
   const bullyInstances = useRef<any>(null)
+  const tokenInstances = useRef<any>(null)
   const [selectedProcess, setSelectedProcess] = useState<number>(1)
   const [autoRun, setAutoRun] = useState<boolean>(true)
   const [speed, setSpeed] = useState<number>(300)
@@ -60,7 +61,7 @@ export default function App() {
         tokens[p.id] = token
         sim.registerHandler(p.id, (msg) => token.handle(msg))
       })
-      raInstances.current = tokens
+      tokenInstances.current = tokens
     }
     
     if (autoRun) sim.start(speed)
@@ -192,8 +193,29 @@ export default function App() {
     }
   }, [algorithm])
 
-  function passToken() {
-    appendLog('Pass token (Token Ring) from process 1 to 2')
+  async function passToken() {
+    const sim = simRef.current
+    if (!sim) return appendLog('Start simulation first')
+    const tokens = tokenInstances.current
+    if (!tokens) return appendLog('Token Ring algorithm not initialized')
+
+    const sortedPeers = processes.map((p) => p.id).sort((a, b) => a - b)
+    const initiator = selectedProcess
+    const currentIndex = sortedPeers.indexOf(initiator)
+    const nextPeer = sortedPeers[(currentIndex + 1) % sortedPeers.length]
+    
+    tokens[initiator].state.hasToken = true
+    tokens[initiator].passToken(nextPeer, (m: Message) => sim.send(m))
+    appendLog(`Process ${initiator} passed token to ${nextPeer}`)
+
+    try {
+      const { generateTokenRingCinema } = await import('./features/sim/algorithms/tokenRingCinema')
+      const payload = generateTokenRingCinema(initiator, sortedPeers)
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded cinema payload for Token Ring playback')
+    } catch (e) {
+      appendLog('Failed to load cinema payload: ' + String(e))
+    }
   }
 
   return (
