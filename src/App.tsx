@@ -152,6 +152,8 @@ export default function App() {
     // notify SimProvider about selected algorithm
     try {
       window.dispatchEvent(new CustomEvent('sim:set_algorithm', { detail: algorithm }))
+      // Réinitialiser l'état quand on change d'algorithme
+      window.dispatchEvent(new CustomEvent('sim:reset'))
     } catch (e) {
       // ignore
     }

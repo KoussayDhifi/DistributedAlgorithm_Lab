@@ -500,7 +500,7 @@ function generateChangRobertsCinema(ring: RingProcess[], initiators: number[]): 
         meta: { value: i, type: 'ELECTED' }
       } as MessageStep)
       
-      // Diffuser à tous les autres processus
+      // Diffuser à tous les autres processus (tour complet)
       let electedPos = nextIdx
       for (let k = 0; k < n - 1; k++) {
         const proc = ring[electedPos]
@@ -529,24 +529,22 @@ function generateChangRobertsCinema(ring: RingProcess[], initiators: number[]): 
         } as NodeStateStep)
         
         const nextElectedIdx = (electedPos + 1) % n
-        if (nextElectedIdx !== msg.currentPos) {
-          const nextProc = ring[nextElectedIdx]
-          if (nextProc) {
-            steps.push({
-              type: 'narration',
-              id: id('n'),
-              text: `P${proc.id} diffuse elu(${i}) → P${nextProc.id}`
-            } as NarrationStep)
-            
-            steps.push({
-              type: 'message',
-              id: id('msg'),
-              from: proc.id,
-              to: nextProc.id,
-              msgType: `L(${i})`,
-              meta: { value: i, type: 'ELECTED' }
-            } as MessageStep)
-          }
+        const nextProc = ring[nextElectedIdx]
+        if (nextProc) {
+          steps.push({
+            type: 'narration',
+            id: id('n'),
+            text: `P${proc.id} diffuse elu(${i}) → P${nextProc.id}`
+          } as NarrationStep)
+          
+          steps.push({
+            type: 'message',
+            id: id('msg'),
+            from: proc.id,
+            to: nextProc.id,
+            msgType: `L(${i})`,
+            meta: { value: i, type: 'ELECTED' }
+          } as MessageStep)
         }
         electedPos = nextElectedIdx
       }

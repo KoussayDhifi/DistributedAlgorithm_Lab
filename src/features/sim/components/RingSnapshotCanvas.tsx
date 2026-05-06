@@ -9,15 +9,8 @@ import type { AlgorithmStep, NodeStateStep, MessageStep } from '../model/algorit
 export default function RingSnapshotCanvas() {
   const { state } = useSim()
   
-  console.log('🔍 RingSnapshotCanvas render - state.processes:', state.processes)
-  
   const snapshots = useMemo(() => {
-    console.log('🔍 buildSnapshots called with processes:', state.processes)
     const result = buildSnapshots(state.processes, state.steps, state.index)
-    console.log('🔍 buildSnapshots result - first snapshot:', result[0])
-    if (result.length > 1) {
-      console.log('🔍 buildSnapshots result - second snapshot:', result[1])
-    }
     return result
   }, [state.processes, state.steps, state.index])
   
@@ -43,9 +36,6 @@ export default function RingSnapshotCanvas() {
         alignItems: 'center'
       }}>
         <span>Snapshots de l'élection ({snapshots.length})</span>
-        <span style={{ fontSize: 10, opacity: 0.8 }}>
-          Debug: {state.processes.map(p => `${p.id}:${p.processId ?? '?'}`).join(' ')}
-        </span>
         {snapshots.length > 10 && (
           <span style={{ fontSize: 12, opacity: 0.9 }}>
             Grille scrollable ↓
@@ -160,11 +150,6 @@ function buildSnapshots(
   
   if (initialProcesses.length === 0) return snapshots
   
-  // Debug: vérifier si processId est présent
-  if (initialProcesses.length > 0 && initialProcesses[0].processId == null) {
-    console.error('❌ processId manquant dans initialProcesses:', initialProcesses)
-  }
-  
   const initialSnapshot: SnapshotData = {
     label: 't=0 (Initial)',
     processes: initialProcesses.map(p => ({
@@ -182,7 +167,6 @@ function buildSnapshots(
   const processStates = new Map<number, any>()
   initialProcesses.forEach(p => {
     const processId = p.processId != null ? p.processId : p.id
-    console.log(`🔍 Init processState for p.id=${p.id}, processId=${processId}`)
     processStates.set(p.id, {
       id: p.id,
       processId: processId,
@@ -232,7 +216,6 @@ function buildSnapshots(
           ...p,
           processId: processId  // Forcer la présence de processId
         }
-        console.log(`🔍 Snapshot t=${snapshotCount}, process ${p.id}:`, { id: p.id, processId: copy.processId, color: p.color })
         return copy
       })
       const snapshot: SnapshotData = {
@@ -434,18 +417,6 @@ function RingSnapshot({
             >
               {p.processId != null ? p.processId : `?${p.id}`}
             </text>
-            {/* Debug: afficher aussi l'ID interne en petit */}
-            {p.processId != null && p.processId !== p.id && (
-              <text
-                x={p.x}
-                y={p.y + 16}
-                fontSize={7}
-                textAnchor="middle"
-                fill="#999"
-              >
-                (p{p.id})
-              </text>
-            )}
             
             {/* Badge état interne - positionné radialement */}
             <g>
