@@ -2,7 +2,49 @@ import React from 'react'
 import { useSim } from '../state/SimProvider'
 import type { MessageStep, AlgorithmStep } from '../model/algorithmCinema'
 
-export default function GraphCanvas() {
+function colorFor(m: MessageStep) {
+  const t = String(m.msgType || '').toUpperCase()
+  if (t.includes('REQUEST')) return 'crimson'
+  if (t.includes('REPLY')) return 'seagreen'
+  if (t.includes('ELECTION')) return 'orange'
+  if (t.includes('OK')) return 'green'
+  if (t.includes('COORD')) return 'purple'
+  return '#333'
+}
+
+function getCurve(p1: { x: number; y: number }, p2: { x: number; y: number }, progress: number, curveOffset: number = 40) {
+  const dx = p2.x - p1.x
+  const dy = p2.y - p1.y
+  const len = Math.max(1, Math.sqrt(dx * dx + dy * dy))
+
+  const startRadius = 25
+  const endRadius = 25
+
+  const P0 = { x: p1.x + (dx / len) * startRadius, y: p1.y + (dy / len) * startRadius }
+  const P2 = { x: p1.x + (dx / len) * (len - endRadius), y: p1.y + (dy / len) * (len - endRadius) }
+
+  const ldx = P2.x - P0.x
+  const ldy = P2.y - P0.y
+  const currLen = Math.max(1, Math.sqrt(ldx * ldx + ldy * ldy))
+  const nx = -ldy / currLen
+  const ny = ldx / currLen
+
+  const P1 = { x: (P0.x + P2.x) / 2 + nx * curveOffset, y: (P0.y + P2.y) / 2 + ny * curveOffset }
+
+  if (progress >= 1) {
+    const midX = 0.25 * P0.x + 0.5 * P1.x + 0.25 * P2.x
+    const midY = 0.25 * P0.y + 0.5 * P1.y + 0.25 * P2.y
+    return { path: `M ${P0.x} ${P0.y} Q ${P1.x} ${P1.y} ${P2.x} ${P2.y}`, midX, midY, head: P2 }
+  }
+
+  const P0_1 = { x: (1 - progress) * P0.x + progress * P1.x, y: (1 - progress) * P0.y + progress * P1.y }
+  const P1_2 = { x: (1 - progress) * P1.x + progress * P2.x, y: (1 - progress) * P1.y + progress * P2.y }
+  const P0_2 = { x: (1 - progress) * P0_1.x + progress * P1_2.x, y: (1 - progress) * P0_1.y + progress * P1_2.y }
+
+  return { path: `M ${P0.x} ${P0.y} Q ${P0_1.x} ${P0_1.y} ${P0_2.x} ${P0_2.y}`, head: P0_2 }
+}
+
+function SequenceCanvas() {
   const { state } = useSim()
   const width = 900
   const height = 500
@@ -171,4 +213,169 @@ export default function GraphCanvas() {
       </g>
     </svg>
   )
+}
+
+function NetworkCanvas() {
+  const { state } = useSim()
+  const width = 900
+  const height = 500
+  const cx = width / 2
+  const cy = height / 2
+  const radius = Math.min(width, height) / 2 - 60
+
+  const nodes = state.processes
+  const steps = state.steps
+  const idx = state.index
+
+  // precalculate node positions
+  const positions = new Map<number, { x: number; y: number }>()
+  nodes.forEach((n, i) => {
+    const angle = (i * 2 * Math.PI) / Math.max(1, nodes.length) - Math.PI / 2
+    positions.set(n.id, {
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+    })
+  })
+
+  const messages: Array<{ stepIndex: number; m: MessageStep }> = []
+  steps.forEach((s, i) => {
+    if ((s as any).type === 'message') messages.push({ stepIndex: i, m: s as MessageStep })
+  })
+
+  const pairs: Array<{ sendIndex: number; deliverIndex: number; send: MessageStep; deliver: MessageStep }> = []
+  const used = new Set<number>()
+  for (let i = 0; i < messages.length; i++) {
+    if (used.has(i)) continue
+    const { stepIndex: sIdx, m } = messages[i]
+    let found = -1
+    for (let j = i + 1; j < messages.length; j++) {
+      if (used.has(j)) continue
+      const mj = messages[j].m
+      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) {
+        found = j
+        break
+      }
+    }
+    if (found !== -1) {
+      pairs.push({ sendIndex: sIdx, deliverIndex: messages[found].stepIndex, send: m, deliver: messages[found].m })
+      used.add(i)
+      used.add(found)
+    } else {
+      pairs.push({ sendIndex: sIdx, deliverIndex: sIdx + 1, send: m, deliver: m })
+      used.add(i)
+    }
+  }
+
+  return (
+    <svg width={width} height={height} style={{ background: '#fff' }}>
+      <defs>
+        <marker id="net-arrow-orange" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="orange" /></marker>
+        <marker id="net-arrow-green" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="green" /></marker>
+        <marker id="net-arrow-purple" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="purple" /></marker>
+        <marker id="net-arrow-default" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="#333" /></marker>
+      </defs>
+
+      {/* Messages */}
+      <g>
+        {pairs.map((pair, i) => {
+          const { sendIndex, deliverIndex, send } = pair
+          if (sendIndex >= idx) return null // future
+
+          const p1 = positions.get(send.from)
+          const p2 = positions.get(send.to)
+          if (!p1 || !p2) return null
+
+          const color = colorFor(send)
+          let markerId = 'net-arrow-default'
+          if (color === 'orange') markerId = 'net-arrow-orange'
+          if (color === 'green') markerId = 'net-arrow-green'
+          if (color === 'purple') markerId = 'net-arrow-purple'
+
+          let offsetMag = 40
+          if (send.msgType === 'BULLY_COORD') offsetMag = 80
+
+          if (deliverIndex <= idx) {
+            const curve = getCurve(p1, p2, 1, offsetMag)
+            return (
+              <g key={`del-${i}`}>
+                <path
+                  d={curve.path}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  fill="none"
+                  opacity={0.4}
+                  markerEnd={`url(#${markerId})`}
+                />
+                <text x={curve.midX} y={(curve.midY ?? 0) + 3} fontSize={10} textAnchor="middle" fill={color} opacity={0.8} fontWeight="bold">
+                  {send.msgType}
+                </text>
+              </g>
+            )
+          } else {
+            // in-flight message
+            const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
+            const curve = getCurve(p1, p2, progress, offsetMag)
+            const cx2 = curve.head.x
+            const cy2 = curve.head.y
+            
+            return (
+              <g key={`inflight-${i}`}>
+                <path
+                  d={curve.path}
+                  stroke={color}
+                  strokeWidth={2}
+                  fill="none"
+                  strokeDasharray="4 4"
+                  markerEnd={`url(#${markerId})`}
+                />
+                <circle cx={cx2} cy={cy2} r={4} fill={color} />
+                <rect x={cx2 + 5} y={cy2 - 10} rx={4} width={Math.max(50, String(send.msgType).length * 8)} height={18} fill="#fff" opacity={0.8} />
+                <text x={cx2 + Math.max(50, String(send.msgType).length * 8) / 2 + 5} y={cy2 + 3} fontSize={10} textAnchor="middle" fill="#000" fontWeight="bold">
+                  {send.msgType}
+                </text>
+              </g>
+            )
+          }
+        })}
+      </g>
+
+      {/* Nodes */}
+      <g>
+        {nodes.map(n => {
+          const pos = positions.get(n.id)
+          if (!pos) return null
+          const isLeader = n.color === 'purple'
+          return (
+            <g key={n.id} transform={`translate(${pos.x}, ${pos.y})`}>
+              <circle
+                r={20}
+                fill={isLeader ? 'purple' : '#fff'}
+                stroke={isLeader ? '#333' : '#4dabf7'}
+                strokeWidth={3}
+              />
+              <text
+                y={5}
+                fontSize={14}
+                fontWeight={700}
+                textAnchor="middle"
+                fill={isLeader ? '#fff' : '#000'}
+              >
+                {n.label ?? `P${n.id}`}
+              </text>
+            </g>
+          )
+        })}
+      </g>
+    </svg>
+  )
+}
+
+export default function GraphCanvas() {
+  const { state } = useSim()
+
+  if (state.algorithm === 'bully') {
+    return <NetworkCanvas />
+  }
+
+  return <SequenceCanvas />
 }
