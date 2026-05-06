@@ -16,6 +16,16 @@ export default function TimelineControls() {
       if (id) clearInterval(id)
     }
   }, [state.playing, state.speed, dispatch])
+  
+  // Émettre les narrations quand l'index change
+  useEffect(() => {
+    if (state.index > 0 && state.index <= state.steps.length) {
+      const step = state.steps[state.index - 1]
+      if (step && step.type === 'narration') {
+        window.dispatchEvent(new CustomEvent('sim:narration', { detail: (step as any).text }))
+      }
+    }
+  }, [state.index, state.steps])
 
   const stepsCount = state.steps.length
 

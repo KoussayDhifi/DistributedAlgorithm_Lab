@@ -1,5 +1,7 @@
 import React from 'react'
 import { Button, Stack, Title, Group, Select, Slider, Switch, NumberInput } from '@mantine/core'
+import RingElectionControls from './RingElectionControls'
+import type { RingVariant } from '../features/sim/algorithms/ringElectionCinema'
 
 type Props = {
   onStart: () => void
@@ -7,6 +9,7 @@ type Props = {
   onRequestCS: () => void
   onPassToken: () => void
   onStep: () => void
+  onRunRingElection?: (variant: RingVariant, initiators: number[], customIds: number[]) => void
   processes: number[]
   selectedProcess: number
   setSelectedProcess: (id: number) => void
@@ -20,7 +23,7 @@ type Props = {
   setNumberOfProcesses: (n: number) => void
 }
 
-export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
+export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, onRunRingElection, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
 
   return (
     <Stack>
@@ -47,27 +50,41 @@ export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken
         max={50}
         onChange={(v) => setNumberOfProcesses(v || 1)}
       />
-      <Select
-        label="Requester"
-        value={String(selectedProcess)}
-        onChange={(v) => setSelectedProcess(Number(v))}
-        data={processes.map((p) => ({ value: String(p), label: `Process ${p}` }))}
-      />
-      <Group spacing="xs" align="center">
-        <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
-      </Group>
-      <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
-
-      {/* Conditional action button based on selected algorithm */}
-      {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart–Agrawala)</Button>}
-      {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
-      {(algorithm === 'bully' || algorithm === 'ring') && (
-        <Button onClick={onStep}>Run {algorithm === 'bully' ? 'Bully' : 'Ring'} Election (step)</Button>
+      
+      {/* Afficher les contrôles Ring Election uniquement si l'algorithme est Ring */}
+      {algorithm === 'ring' && onRunRingElection && (
+        <RingElectionControls
+          numberOfProcesses={numberOfProcesses}
+          onRunElection={onRunRingElection}
+        />
       )}
+      
+      {/* Afficher les contrôles classiques pour les autres algorithmes */}
+      {algorithm !== 'ring' && (
+        <>
+          <Select
+            label="Requester"
+            value={String(selectedProcess)}
+            onChange={(v) => setSelectedProcess(Number(v))}
+            data={processes.map((p) => ({ value: String(p), label: `Process ${p}` }))}
+          />
+          <Group spacing="xs" align="center">
+            <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
+          </Group>
+          <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
 
-      <Group>
-        <Button onClick={onStep}>Step</Button>
-      </Group>
+          {/* Conditional action button based on selected algorithm */}
+          {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart–Agrawala)</Button>}
+          {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
+          {algorithm === 'bully' && (
+            <Button onClick={onStep}>Run Bully Election (step)</Button>
+          )}
+
+          <Group>
+            <Button onClick={onStep}>Step</Button>
+          </Group>
+        </>
+      )}
     </Stack>
   )
 }

@@ -3,6 +3,7 @@ import { Container, Grid, Card, Title } from '@mantine/core'
 import ControlPanel from './components/ControlPanel'
 // Visualizer replaced by GraphCanvas (d3 + cinema model)
 import GraphCanvas from './features/sim/components/GraphCanvas'
+import RingSnapshotCanvas from './features/sim/components/RingSnapshotCanvas'
 import LogView from './components/LogView'
 import { SimProvider } from './features/sim/state/SimProvider'
 import TimelineControls from './features/sim/components/TimelineControls'
@@ -11,9 +12,10 @@ import { createRicartAgrawala } from './algorithms/ricartAgrawala'
 import { createTokenRing } from './algorithms/tokenRing'
 import { Process } from './types'
 import type { Message } from './types'
+import type { RingVariant } from './features/sim/algorithms/ringElectionCinema'
 
 export default function App() {
-  const initialProcesses: Process[] = [1, 2, 3].map((id) => ({ id, state: 'idle', log: [] }))
+  const initialProcesses: Process[] = [1, 2, 3, 4, 5].map((id) => ({ id, state: 'idle', log: [] }))
   const [processes, setProcesses] = useState<Process[]>(initialProcesses)
   const [numberOfProcesses, setNumberOfProcesses] = useState<number>(initialProcesses.length)
   const [logs, setLogs] = useState<string[]>([])
@@ -158,6 +160,58 @@ export default function App() {
   function passToken() {
     appendLog('Pass token (Token Ring) from process 1 to 2')
   }
+  
+  async function runRingElection(variant: RingVariant, initiators: number[], customIds: number[]) {
+    appendLog(`Lancement Ring Election — Variante: ${variant === 'leLann' ? 'Le Lann' : 'Chang-Roberts'}`)
+    appendLog(`Initiateurs: ${initiators.map(i => `P${i}`).join(', ')}`)
+    
+    try {
+      const { generateRingElectionCinema } = await import('./features/sim/algorithms/ringElectionCinema')
+      
+      const ring = processes.map((p, i) => ({
+        id: p.id,
+        processId: customIds[i] || (i + 1)
+      }))
+      
+      appendLog(`Anneau: ${ring.map(r => `P${r.id}(id=${r.processId})`).join(' → ')}`)
+      
+      const cinemaProcesses = ring.map(r => ({
+        id: r.id,
+        label: `P${r.id}`,
+        color: 'white',
+        processId: r.processId
+      }))
+      
+      window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: cinemaProcesses }))
+      
+      const payload = generateRingElectionCinema(variant, ring, initiators)
+      
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      window.dispatchEvent(new CustomEvent('sim:set_algorithm', { detail: 'ring' }))
+      
+      appendLog('✓ Scénario chargé')
+      
+      // Écouter les changements d'index pour afficher les narrations
+      window.dispatchEvent(new CustomEvent('sim:enable_narration_logs', { detail: true }))
+    } catch (e) {
+      appendLog('❌ Erreur: ' + String(e))
+      console.error(e)
+    }
+  }
+  
+  // Écouter les narrations de la simulation
+  useEffect(() => {
+    function handleNarration(e: any) {
+      const text = e?.detail
+      if (typeof text === 'string') {
+        appendLog(text)
+      }
+    }
+    window.addEventListener('sim:narration', handleNarration)
+    return () => {
+      window.removeEventListener('sim:narration', handleNarration)
+    }
+  }, [])
 
   return (
     <SimProvider>
@@ -173,6 +227,7 @@ export default function App() {
                   onRequestCS={requestCS}
                   onPassToken={passToken}
                   onStep={step}
+                  onRunRingElection={runRingElection}
                   processes={processes.map((p) => p.id)}
                   selectedProcess={selectedProcess}
                   setSelectedProcess={setSelectedProcess}
@@ -199,7 +254,12 @@ export default function App() {
                     <TimelineControls />
                   </React.Suspense>
                 </div>
-                <GraphCanvas />
+                {/* Afficher RingSnapshotCanvas uniquement pour Ring Election */}
+                {algorithm === 'ring' ? (
+                  <RingSnapshotCanvas />
+                ) : (
+                  <GraphCanvas />
+                )}
               </Card>
             </div>
           </div>
