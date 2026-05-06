@@ -9,6 +9,7 @@ import TimelineControls from './features/sim/components/TimelineControls'
 import { Simulator } from './algorithms/simulation'
 import { createRicartAgrawala } from './algorithms/ricartAgrawala'
 import { createTokenRing } from './algorithms/tokenRing'
+import { createBully } from './algorithms/bully'
 import { Process } from './types'
 import type { Message } from './types'
 
@@ -20,6 +21,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const simRef = useRef<Simulator | null>(null)
   const raInstances = useRef<any>(null)
+  const bullyInstances = useRef<any>(null)
   const [selectedProcess, setSelectedProcess] = useState<number>(1)
   const [autoRun, setAutoRun] = useState<boolean>(true)
   const [speed, setSpeed] = useState<number>(300)
@@ -33,28 +35,40 @@ export default function App() {
     const sim = new Simulator({ processes, onLog: appendLog, onMessage: (m) => setMessages((s) => [...s, m].slice(-200)) })
     simRef.current = sim
     // create and register algorithm handlers
-    const peers = processes.map((p) => p.id).filter((id) => id !== 1)
-    const ras: Record<number, any> = {}
-    processes.forEach((p) => {
-      const ra = createRicartAgrawala(p.id)
-      ras[p.id] = ra
-      sim.registerHandler(p.id, (msg) => ra.handle(msg, (m) => sim.send(m)))
-    })
-    raInstances.current = ras
+    const peers = processes.map((p) => p.id)
+    
+    if (algorithm === 'ricart') {
+      const ras: Record<number, any> = {}
+      processes.forEach((p) => {
+        const ra = createRicartAgrawala(p.id)
+        ras[p.id] = ra
+        sim.registerHandler(p.id, (msg) => ra.handle(msg, (m: Message) => sim.send(m)))
+      })
+      raInstances.current = ras
+    } else if (algorithm === 'bully') {
+      const bullies: Record<number, any> = {}
+      processes.forEach((p) => {
+        const bully = createBully(p.id)
+        bullies[p.id] = bully
+        sim.registerHandler(p.id, (msg) => bully.handle(msg, (m: Message) => sim.send(m), peers))
+      })
+      bullyInstances.current = bullies
+    } else if (algorithm === 'token') {
+      const tokens: Record<number, any> = {}
+      processes.forEach((p) => {
+        const token = createTokenRing(p.id)
+        tokens[p.id] = token
+        sim.registerHandler(p.id, (msg) => token.handle(msg))
+      })
+      raInstances.current = tokens
+    }
+    
     if (autoRun) sim.start(speed)
     appendLog('Simulation started')
 
     // initialize SimProvider processes
     try {
       // dynamic import to avoid circular during boot
-      const { dispatch } = require('./features/sim/state/SimProvider').useSim ? require('./features/sim/state/SimProvider') : { dispatch: null }
-    } catch (e) {
-      // fallback: use global window (we will dispatch via context in a real wiring step)
-    }
-    // dispatch INIT_PROCESSES
-    try {
-      // import hook and dispatch
-      // We can't call hook here; instead just send a simple CustomEvent for now
       const payload = processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
       window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
     } catch (e) {
@@ -130,6 +144,29 @@ export default function App() {
     sim.step()
   }
 
+  async function startBullyElection() {
+    const sim = simRef.current
+    if (!sim) return appendLog('Start simulation first')
+    const bullies = bullyInstances.current
+    if (!bullies) return appendLog('Bully algorithm not initialized')
+    
+    const peers = processes.map((p) => p.id)
+    const initiator = selectedProcess
+    
+    appendLog(`Process ${initiator} initiates bully election`)
+    bullies[initiator].startElection(peers, (m: Message) => sim.send(m))
+
+    // generate and load cinema for deterministic playback demo
+    try {
+      const { generateBullyCinema } = await import('./features/sim/algorithms/bullyCinema')
+      const payload = generateBullyCinema(initiator, peers)
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded cinema payload for Bully playback')
+    } catch (e) {
+      appendLog('Failed to load cinema payload: ' + String(e))
+    }
+  }
+
   // control speed and auto-run
   function handleSetAutoRun(v: boolean) {
     setAutoRun(v)
@@ -173,6 +210,7 @@ export default function App() {
                   onRequestCS={requestCS}
                   onPassToken={passToken}
                   onStep={step}
+                  onBullyElection={startBullyElection}
                   processes={processes.map((p) => p.id)}
                   selectedProcess={selectedProcess}
                   setSelectedProcess={setSelectedProcess}

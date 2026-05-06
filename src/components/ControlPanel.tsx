@@ -7,6 +7,7 @@ type Props = {
   onRequestCS: () => void
   onPassToken: () => void
   onStep: () => void
+  onBullyElection: () => void
   processes: number[]
   selectedProcess: number
   setSelectedProcess: (id: number) => void
@@ -20,7 +21,7 @@ type Props = {
   setNumberOfProcesses: (n: number) => void
 }
 
-export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
+export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, onBullyElection, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
 
   return (
     <Stack>
@@ -45,7 +46,7 @@ export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken
         value={numberOfProcesses}
         min={1}
         max={50}
-        onChange={(v) => setNumberOfProcesses(v || 1)}
+        onChange={(v) => setNumberOfProcesses(Number(v) || 1)}
       />
       <Select
         label="Requester"
@@ -53,7 +54,7 @@ export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken
         onChange={(v) => setSelectedProcess(Number(v))}
         data={processes.map((p) => ({ value: String(p), label: `Process ${p}` }))}
       />
-      <Group spacing="xs" align="center">
+      <Group gap="xs" align="center">
         <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
       </Group>
       <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
@@ -61,9 +62,8 @@ export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken
       {/* Conditional action button based on selected algorithm */}
       {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart–Agrawala)</Button>}
       {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
-      {(algorithm === 'bully' || algorithm === 'ring') && (
-        <Button onClick={onStep}>Run {algorithm === 'bully' ? 'Bully' : 'Ring'} Election (step)</Button>
-      )}
+      {algorithm === 'bully' && <Button onClick={onBullyElection}>Start Bully Election</Button>}
+      {algorithm === 'ring' && <Button onClick={onStep}>Start Ring Election</Button>}
 
       <Group>
         <Button onClick={onStep}>Step</Button>
