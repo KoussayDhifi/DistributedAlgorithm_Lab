@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Container, Grid, Card, Title } from '@mantine/core'
+import { Container, Card, Title } from '@mantine/core'
 import ControlPanel from './components/ControlPanel'
-// Visualizer replaced by GraphCanvas (d3 + cinema model)
 import GraphCanvas from './features/sim/components/GraphCanvas'
 import LogView from './components/LogView'
 import { SimProvider } from './features/sim/state/SimProvider'
@@ -17,6 +16,7 @@ export default function App() {
   const initialProcesses: Process[] = [1, 2, 3].map((id) => ({ id, state: 'idle', log: [] }))
   const [processes, setProcesses] = useState<Process[]>(initialProcesses)
   const [numberOfProcesses, setNumberOfProcesses] = useState<number>(initialProcesses.length)
+  const [tokenHolder, setTokenHolder] = useState<number>(1)
   const [logs, setLogs] = useState<string[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const simRef = useRef<Simulator | null>(null)
@@ -32,13 +32,23 @@ export default function App() {
     setLogs((l) => [...l, new Date().toLocaleTimeString() + ' ' + s].slice(-500))
   }
 
-  function start() {
-    const sim = new Simulator({ processes, onLog: appendLog, onMessage: (m) => setMessages((s) => [...s, m].slice(-200)) })
+  // ── Crée un simulateur propre pour l'algo demandé ──────────────────────────
+  function initSim(algo: string): Simulator {
+    // Arrêter et détruire l'ancien sim
+    simRef.current?.stop()
+    raInstances.current    = null
+    bullyInstances.current = null
+    tokenInstances.current = null
+
+    const sim = new Simulator({
+      processes,
+      onLog: appendLog,
+      onMessage: (m) => setMessages((s) => [...s, m].slice(-200)),
+    })
     simRef.current = sim
-    // create and register algorithm handlers
     const peers = processes.map((p) => p.id)
-    
-    if (algorithm === 'ricart') {
+
+    if (algo === 'ricart') {
       const ras: Record<number, any> = {}
       processes.forEach((p) => {
         const ra = createRicartAgrawala(p.id)
@@ -46,7 +56,8 @@ export default function App() {
         sim.registerHandler(p.id, (msg) => ra.handle(msg, (m: Message) => sim.send(m)))
       })
       raInstances.current = ras
-    } else if (algorithm === 'bully') {
+
+    } else if (algo === 'bully') {
       const bullies: Record<number, any> = {}
       processes.forEach((p) => {
         const bully = createBully(p.id)
@@ -54,7 +65,8 @@ export default function App() {
         sim.registerHandler(p.id, (msg) => bully.handle(msg, (m: Message) => sim.send(m), peers))
       })
       bullyInstances.current = bullies
-    } else if (algorithm === 'token') {
+
+    } else if (algo === 'token') {
       const tokens: Record<number, any> = {}
       processes.forEach((p) => {
         const token = createTokenRing(p.id)
@@ -63,32 +75,28 @@ export default function App() {
       })
       tokenInstances.current = tokens
     }
-    
-    if (autoRun) sim.start(speed)
-    appendLog('Simulation started')
+    // suzuki : pas de sim en temps réel, uniquement cinema
 
-    // initialize SimProvider processes
-    try {
-      // dynamic import to avoid circular during boot
-      const payload = processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
-      window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
-    } catch (e) {
-      // ignore
-    }
+    if (autoRun) sim.start(speed)
+
+    // Notifier le provider
+    const payload = processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
+    window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
+
+    return sim
   }
 
-  // respond to numberOfProcesses changes by updating processes list and notifying provider
   React.useEffect(() => {
-    const newProcs: Process[] = Array.from({ length: numberOfProcesses }).map((_, i) => ({ id: i + 1, state: 'idle', log: [] }))
+    const newProcs: Process[] = Array.from({ length: numberOfProcesses }).map((_, i) => ({
+      id: i + 1, state: 'idle', log: [],
+    }))
     setProcesses(newProcs)
     try {
       const payload = newProcs.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
       window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
-    } catch (e) {
-      // ignore
-    }
-    // keep selectedProcess valid
+    } catch (e) {}
     setSelectedProcess((cur) => Math.max(1, Math.min(cur, numberOfProcesses)))
+    setTokenHolder((cur) => Math.max(1, Math.min(cur, numberOfProcesses)))
   }, [numberOfProcesses])
 
   function stop() {
@@ -96,39 +104,36 @@ export default function App() {
     appendLog('Simulation stopped')
   }
 
+  // ── Ricart–Agrawala ────────────────────────────────────────────────────────
   async function requestCS() {
     appendLog('Requesting CS (Ricart–Agrawala)')
-    const sim = simRef.current
-    if (!sim) return appendLog('Start simulation first')
+    const sim = initSim('ricart')           // ← repart propre
+    appendLog('Simulation Ricart–Agrawala démarrée')
+
     const requester = selectedProcess
     const peers = processes.map((p) => p.id).filter((id) => id !== requester)
     const ra = raInstances.current?.[requester]
     if (!ra) return appendLog('RA instance missing')
-    // mark UI state
+
     setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'requesting' } : pp)))
     ra.requestCS(Date.now(), (m: Message) => sim.send(m), peers)
     appendLog(`Process ${requester} sent RA_REQUEST to peers`)
 
-    // watch for replies; when all replies received, enter CS
     const checkInterval = setInterval(() => {
       try {
         if (ra.gotAll(peers)) {
           clearInterval(checkInterval)
           appendLog(`Process ${requester} received all RA_REPLY — entering CS`)
           setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'in_cs' } : pp)))
-          // hold CS for 2s then release
           setTimeout(() => {
             appendLog(`Process ${requester} leaving CS — releasing replies`)
             ra.release((m: Message) => sim.send(m))
             setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'idle' } : pp)))
           }, 2000)
         }
-      } catch (e) {
-        clearInterval(checkInterval)
-      }
+      } catch (e) { clearInterval(checkInterval) }
     }, 150)
 
-    // generate and load cinema for deterministic playback demo
     try {
       const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
       const payload = generateRicartAgrawalaCinema(requester, processes.map((p) => p.id))
@@ -145,19 +150,19 @@ export default function App() {
     sim.step()
   }
 
+  // ── Bully ──────────────────────────────────────────────────────────────────
   async function startBullyElection() {
-    const sim = simRef.current
-    if (!sim) return appendLog('Start simulation first')
+    const sim = initSim('bully')            // ← repart propre
+    appendLog('Simulation Bully démarrée')
+
     const bullies = bullyInstances.current
     if (!bullies) return appendLog('Bully algorithm not initialized')
-    
+
     const peers = processes.map((p) => p.id)
     const initiator = selectedProcess
-    
     appendLog(`Process ${initiator} initiates bully election`)
     bullies[initiator].startElection(peers, (m: Message) => sim.send(m))
 
-    // generate and load cinema for deterministic playback demo
     try {
       const { generateBullyCinema } = await import('./features/sim/algorithms/bullyCinema')
       const payload = generateBullyCinema(initiator, peers)
@@ -168,34 +173,11 @@ export default function App() {
     }
   }
 
-  // control speed and auto-run
-  function handleSetAutoRun(v: boolean) {
-    setAutoRun(v)
-    const sim = simRef.current
-    if (!sim) return
-    if (v) sim.start(speed)
-    else sim.stop()
-  }
-
-  function handleSetSpeed(v: number) {
-    setSpeed(v)
-    const sim = simRef.current
-    if (!sim) return
-    sim.setTick(v)
-  }
-
-  useEffect(() => {
-    // notify SimProvider about selected algorithm
-    try {
-      window.dispatchEvent(new CustomEvent('sim:set_algorithm', { detail: algorithm }))
-    } catch (e) {
-      // ignore
-    }
-  }, [algorithm])
-
+  // ── Token Ring ─────────────────────────────────────────────────────────────
   async function passToken() {
-    const sim = simRef.current
-    if (!sim) return appendLog('Start simulation first')
+    const sim = initSim('token')            // ← repart propre
+    appendLog('Simulation Token Ring démarrée')
+
     const tokens = tokenInstances.current
     if (!tokens) return appendLog('Token Ring algorithm not initialized')
 
@@ -203,7 +185,7 @@ export default function App() {
     const initiator = selectedProcess
     const currentIndex = sortedPeers.indexOf(initiator)
     const nextPeer = sortedPeers[(currentIndex + 1) % sortedPeers.length]
-    
+
     tokens[initiator].state.hasToken = true
     tokens[initiator].passToken(nextPeer, (m: Message) => sim.send(m))
     appendLog(`Process ${initiator} passed token to ${nextPeer}`)
@@ -218,6 +200,52 @@ export default function App() {
     }
   }
 
+  // ── Suzuki-Kasami ──────────────────────────────────────────────────────────
+  async function requestSuzuki() {
+    // Suzuki n'a pas de sim temps-réel : juste reset + cinema
+    simRef.current?.stop()
+    simRef.current = null
+    raInstances.current    = null
+    bullyInstances.current = null
+    tokenInstances.current = null
+
+    const payload = processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
+    window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
+
+    appendLog(`Process ${selectedProcess} requests CS (Suzuki-Kasami)`)
+    try {
+      const { generateSuzukiKasamiCinema } = await import('./features/sim/algorithms/suzukiKasamiCinema')
+      const cinPayload = generateSuzukiKasamiCinema(
+        selectedProcess,
+        processes.map((p) => p.id),
+        tokenHolder
+      )
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: cinPayload }))
+      appendLog('Loaded cinema payload for Suzuki-Kasami playback')
+    } catch (e) {
+      appendLog('Failed to load Suzuki-Kasami cinema: ' + String(e))
+    }
+  }
+
+  function handleSetAutoRun(v: boolean) {
+    setAutoRun(v)
+    const sim = simRef.current
+    if (!sim) return
+    if (v) sim.start(speed)
+    else sim.stop()
+  }
+
+  function handleSetSpeed(v: number) {
+    setSpeed(v)
+    simRef.current?.setTick(v)
+  }
+
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent('sim:set_algorithm', { detail: algorithm }))
+    } catch (e) {}
+  }, [algorithm])
+
   return (
     <SimProvider>
       <div className="app">
@@ -227,12 +255,13 @@ export default function App() {
             <div className="left">
               <Card shadow="sm">
                 <ControlPanel
-                  onStart={start}
+                  onStart={stop}          // bouton Stop uniquement
                   onStop={stop}
                   onRequestCS={requestCS}
                   onPassToken={passToken}
                   onStep={step}
                   onBullyElection={startBullyElection}
+                  onSuzukiRequest={requestSuzuki}
                   processes={processes.map((p) => p.id)}
                   selectedProcess={selectedProcess}
                   setSelectedProcess={setSelectedProcess}
@@ -244,9 +273,9 @@ export default function App() {
                   setAlgorithm={setAlgorithm}
                   numberOfProcesses={numberOfProcesses}
                   setNumberOfProcesses={setNumberOfProcesses}
+                  tokenHolder={tokenHolder}
+                  setTokenHolder={setTokenHolder}
                 />
-                
-                
               </Card>
               <Card shadow="sm" style={{ marginTop: 12 }}>
                 <LogView logs={logs} />

@@ -1,36 +1,43 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useSim } from '../state/SimProvider'
-import type { MessageStep, AlgorithmStep } from '../model/algorithmCinema'
+import type { MessageStep } from '../model/algorithmCinema'
+import type { SKSnapshot } from '../algorithms/suzukiKasamiCinema'
 
+// ─── Couleurs des messages ────────────────────────────────────────────────────
 function colorFor(m: MessageStep) {
   const t = String(m.msgType || '').toUpperCase()
-  if (t.includes('REQUEST')) return 'crimson'
-  if (t.includes('REPLY')) return 'seagreen'
-  if (t.includes('ELECTION')) return 'orange'
-  if (t.includes('OK')) return 'green'
-  if (t.includes('COORD')) return 'purple'
-  if (t.includes('TOKEN')) return 'orange'
-  return '#333'
+  if (t.includes('SK_TOKEN'))   return '#f59e0b'
+  if (t.includes('SK_REQUEST')) return '#ef4444'
+  if (t.includes('REQUEST'))    return '#dc2626'
+  if (t.includes('REPLY'))      return '#16a34a'
+  if (t.includes('ELECTION'))   return '#ea580c'
+  if (t.includes('OK'))         return '#15803d'
+  if (t.includes('COORD'))      return '#7c3aed'
+  if (t.includes('TOKEN'))      return '#d97706'
+  return '#64748b'
 }
 
-function getCurve(p1: { x: number; y: number }, p2: { x: number; y: number }, progress: number, curveOffset: number = 40) {
+// ─── Courbe de Bezier quadratique ────────────────────────────────────────────
+function getCurve(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  progress: number,
+  curveOffset = 50
+) {
   const dx = p2.x - p1.x
   const dy = p2.y - p1.y
   const len = Math.max(1, Math.sqrt(dx * dx + dy * dy))
+  const R = 32
 
-  const startRadius = 25
-  const endRadius = 25
-
-  const P0 = { x: p1.x + (dx / len) * startRadius, y: p1.y + (dy / len) * startRadius }
-  const P2 = { x: p1.x + (dx / len) * (len - endRadius), y: p1.y + (dy / len) * (len - endRadius) }
+  const P0 = { x: p1.x + (dx / len) * R,        y: p1.y + (dy / len) * R }
+  const P2 = { x: p1.x + (dx / len) * (len - R), y: p1.y + (dy / len) * (len - R) }
 
   const ldx = P2.x - P0.x
   const ldy = P2.y - P0.y
-  const currLen = Math.max(1, Math.sqrt(ldx * ldx + ldy * ldy))
-  const nx = -ldy / currLen
-  const ny = ldx / currLen
-
-  const P1 = { x: (P0.x + P2.x) / 2 + nx * curveOffset, y: (P0.y + P2.y) / 2 + ny * curveOffset }
+  const cl  = Math.max(1, Math.sqrt(ldx * ldx + ldy * ldy))
+  const nx  = -ldy / cl
+  const ny  =  ldx / cl
+  const P1  = { x: (P0.x + P2.x) / 2 + nx * curveOffset, y: (P0.y + P2.y) / 2 + ny * curveOffset }
 
   if (progress >= 1) {
     const midX = 0.25 * P0.x + 0.5 * P1.x + 0.25 * P2.x
@@ -38,47 +45,398 @@ function getCurve(p1: { x: number; y: number }, p2: { x: number; y: number }, pr
     return { path: `M ${P0.x} ${P0.y} Q ${P1.x} ${P1.y} ${P2.x} ${P2.y}`, midX, midY, head: P2 }
   }
 
-  const P0_1 = { x: (1 - progress) * P0.x + progress * P1.x, y: (1 - progress) * P0.y + progress * P1.y }
-  const P1_2 = { x: (1 - progress) * P1.x + progress * P2.x, y: (1 - progress) * P1.y + progress * P2.y }
-  const P0_2 = { x: (1 - progress) * P0_1.x + progress * P1_2.x, y: (1 - progress) * P0_1.y + progress * P1_2.y }
+  const A = { x: (1 - progress) * P0.x + progress * P1.x, y: (1 - progress) * P0.y + progress * P1.y }
+  const B = { x: (1 - progress) * P1.x + progress * P2.x, y: (1 - progress) * P1.y + progress * P2.y }
+  const C = { x: (1 - progress) * A.x  + progress * B.x,  y: (1 - progress) * A.y  + progress * B.y  }
 
-  return { path: `M ${P0.x} ${P0.y} Q ${P0_1.x} ${P0_1.y} ${P0_2.x} ${P0_2.y}`, head: P0_2 }
+  return { path: `M ${P0.x} ${P0.y} Q ${A.x} ${A.y} ${C.x} ${C.y}`, head: C, midX: undefined, midY: undefined }
 }
 
-function SequenceCanvas() {
+// ─── Tableau RN[i] ────────────────────────────────────────────────────────────
+function SVGRNTable({
+  x, y, processId, rnRow, processes, highlight,
+}: {
+  x: number; y: number; processId: number
+  rnRow: number[]; processes: number[]
+  highlight?: { j: number }
+}) {
+  const cellW = 30
+  const cellH = 26
+  const N = processes.length
+  const totalW = N * cellW + 20
+  const labelH = 18
+
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect x={0} y={0} width={totalW} height={cellH + labelH + 22} rx={7}
+        fill="#1e293b" stroke="#6d28d9" strokeWidth={2} />
+      <text x={totalW / 2} y={13} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#a78bfa">
+        RN{processId}[{N}]
+      </text>
+      {processes.map((p, j) => (
+        <text key={j} x={10 + j * cellW + cellW / 2} y={26}
+          textAnchor="middle" fontSize={9} fill="#94a3b8">P{p}</text>
+      ))}
+      {rnRow.map((val, j) => {
+        const isHL = highlight?.j === j
+        return (
+          <g key={j}>
+            <rect x={10 + j * cellW} y={29} width={cellW - 3} height={cellH}
+              fill={isHL ? '#fbbf24' : val > 0 ? '#14532d' : '#0f172a'}
+              stroke={isHL ? '#fbbf24' : val > 0 ? '#22c55e' : '#334155'}
+              strokeWidth={isHL ? 2.5 : 1} rx={4}
+            />
+            <text x={10 + j * cellW + (cellW - 3) / 2} y={29 + cellH / 2 + 4.5}
+              textAnchor="middle" fontSize={14} fontWeight="bold"
+              fill={isHL ? '#000' : val > 0 ? '#4ade80' : '#475569'}>
+              {val}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+// ─── Panneau TOKEN : LN + Q clairement séparés ───────────────────────────────
+function SVGTokenPanel({
+  x, y, LN, Q, processes, highlight,
+}: {
+  x: number; y: number
+  LN: number[]; Q: number[]; processes: number[]
+  highlight?: number
+}) {
+  const N = processes.length
+  const cellW = 30
+  const cellH = 26
+  const panelW = Math.max(150, N * cellW + 36)
+  const panelH = 140
+
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      {/* Fond */}
+      <rect x={0} y={0} width={panelW} height={panelH} rx={10}
+        fill="#1a1200" stroke="#f59e0b" strokeWidth={2.5} />
+
+      {/* Header TOKEN */}
+      <rect x={0} y={0} width={panelW} height={24} rx={10} fill="#f59e0b" />
+      <rect x={0} y={14} width={panelW} height={10} fill="#f59e0b" />
+      <text x={panelW / 2} y={17} textAnchor="middle" fontSize={12} fontWeight="bold" fill="#000">
+        🏅 TOKEN
+      </text>
+
+      {/* ── Section LN ── */}
+      <rect x={6} y={28} width={panelW - 12} height={14} rx={3} fill="#431407" />
+      <text x={12} y={39} fontSize={9} fontWeight="bold" fill="#fb923c">
+        LN[j] — dernier sn exécuté pour Sj
+      </text>
+      {processes.map((p, j) => (
+        <text key={j} x={10 + j * cellW + (cellW - 3) / 2} y={57}
+          textAnchor="middle" fontSize={9} fill="#94a3b8">P{p}</text>
+      ))}
+      {LN.map((val, j) => {
+        const isHL = highlight === j
+        return (
+          <g key={j}>
+            <rect x={10 + j * cellW} y={60} width={cellW - 3} height={cellH}
+              fill={isHL ? '#fbbf24' : val > 0 ? '#431407' : '#1e293b'}
+              stroke={isHL ? '#fbbf24' : val > 0 ? '#ea580c' : '#334155'}
+              strokeWidth={isHL ? 2.5 : 1} rx={4} />
+            <text x={10 + j * cellW + (cellW - 3) / 2} y={60 + cellH / 2 + 4.5}
+              textAnchor="middle" fontSize={14} fontWeight="bold"
+              fill={isHL ? '#000' : val > 0 ? '#fb923c' : '#475569'}>
+              {val}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Séparateur */}
+      <line x1={8} y1={93} x2={panelW - 8} y2={93} stroke="#334155" strokeWidth={1} />
+
+      {/* ── Section Q ── */}
+      <rect x={6} y={96} width={panelW - 12} height={14} rx={3} fill="#1e1b4b" />
+      <text x={12} y={107} fontSize={9} fontWeight="bold" fill="#a78bfa">
+        Q — file d'attente du token
+      </text>
+      {Q.length === 0 ? (
+        <g>
+          <rect x={10} y={114} width={56} height={cellH} fill="#1e293b" stroke="#334155" rx={4} />
+          <text x={38} y={114 + cellH / 2 + 4.5} textAnchor="middle" fontSize={11} fill="#475569">∅ vide</text>
+        </g>
+      ) : Q.map((p, i) => (
+        <g key={i}>
+          <rect x={10 + i * (cellW + 4)} y={114} width={cellW} height={cellH}
+            fill="#2e1065" stroke="#a855f7" strokeWidth={2} rx={4} />
+          <text x={10 + i * (cellW + 4) + cellW / 2} y={114 + cellH / 2 + 4.5}
+            textAnchor="middle" fontSize={12} fontWeight="bold" fill="#c084fc">
+            P{p}
+          </text>
+        </g>
+      ))}
+    </g>
+  )
+}
+
+// ─── Explication pédagogique ──────────────────────────────────────────────────
+function ExplanationPanel({
+  x, y, width, text, phase,
+}: { x: number; y: number; width: number; text: string; phase: string }) {
+  const PHASE_COLOR: Record<string, string> = {
+    INIT:            '#60a5fa',
+    REQUEST_INIT:    '#34d399',
+    REQUEST_SENT:    '#34d399',
+    BROADCAST:       '#fb923c',
+    RECEIVE_REQUEST: '#a78bfa',
+    SEND_TOKEN:      '#fbbf24',
+    RECEIVE_TOKEN:   '#fbbf24',
+    ENTER_CS:        '#f87171',
+    IN_CS:           '#ef4444',
+    EXIT_CS:         '#4ade80',
+    BUILD_QUEUE:     '#c084fc',
+    PASS_TOKEN:      '#fbbf24',
+    DONE:            '#34d399',
+  }
+  const color = PHASE_COLOR[phase] || '#94a3b8'
+
+  const lines: string[] = []
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.length <= 100) { lines.push(rawLine); continue }
+    const words = rawLine.split(' ')
+    let cur = ''
+    for (const w of words) {
+      if ((cur + ' ' + w).length > 100) { lines.push(cur); cur = w }
+      else cur = cur ? cur + ' ' + w : w
+    }
+    if (cur) lines.push(cur)
+  }
+  const displayLines = lines.slice(0, 6)
+  const boxH = 28 + displayLines.length * 14
+
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect x={0} y={0} width={width} height={boxH} rx={8}
+        fill="#0f2040" stroke={color} strokeWidth={2} opacity={0.97} />
+      <rect x={0} y={0} width={9} height={boxH} fill={color} rx={4} />
+      <rect x={16} y={5} width={Math.max(90, phase.replace(/_/g,' ').length * 7.5)} height={16} rx={4}
+        fill={color + '30'} stroke={color} strokeWidth={1} />
+      <text x={22} y={17} fontSize={10} fontWeight="bold" fill={color}>
+        📍 {phase.replace(/_/g, ' ')}
+      </text>
+      {displayLines.map((line, i) => (
+        <text key={i} x={18} y={30 + i * 14} fontSize={10} fill="#e2e8f0">{line}</text>
+      ))}
+    </g>
+  )
+}
+
+// ─── Badge 🔑 animé, bien écarté du nœud ─────────────────────────────────────
+function TokenBadge({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx={0} cy={0} r={16} fill="none" stroke="#fbbf24" strokeWidth={2} opacity={0.6}>
+        <animate attributeName="r" values="14;22;14" dur="2s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.6;0.05;0.6" dur="2s" repeatCount="indefinite" />
+      </circle>
+      <circle cx={0} cy={0} r={13} fill="#78350f" stroke="#f59e0b" strokeWidth={2.5} />
+      <text x={0} y={5} textAnchor="middle" fontSize={13}>🔑</text>
+    </g>
+  )
+}
+
+// ─── Éditeur d'état manuel ────────────────────────────────────────────────────
+function StateEditor({
+  snap, onClose, onApply,
+}: {
+  snap: SKSnapshot
+  onClose: () => void
+  onApply: (newSnap: SKSnapshot) => void
+}) {
+  const [rnValues, setRnValues] = useState(snap.RN.map(row => [...row]))
+  const [lnValues, setLnValues] = useState([...snap.LN])
+  const [qValue,   setQValue]   = useState(snap.Q.join(','))
+  const [tokenH,   setTokenH]   = useState(snap.tokenHolder)
+
+  const handleApply = () => {
+    const newQ = qValue.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+    onApply({ ...snap, RN: rnValues.map(r => [...r]), LN: [...lnValues], Q: newQ, tokenHolder: tokenH })
+    onClose()
+  }
+
+  const cellStyle: React.CSSProperties = {
+    width: 44, height: 32, textAlign: 'center', fontSize: 14, fontWeight: 'bold',
+    background: '#1e293b', color: '#4ade80', border: '1px solid #334155',
+    borderRadius: 4, margin: 2,
+  }
+  const sectionStyle: React.CSSProperties = {
+    marginBottom: 14, padding: '10px 14px', borderRadius: 8,
+    background: '#0f172a', border: '1px solid #1e293b',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 6,
+  }
+
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(5,10,30,0.93)', zIndex: 100,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(4px)',
+    }}>
+      <div style={{
+        background: '#0d1b2a', border: '2px solid #3b82f6', borderRadius: 14,
+        padding: 24, minWidth: 420, maxWidth: 580, color: '#e2e8f0',
+        boxShadow: '0 8px 40px #000a', maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, color: '#60a5fa' }}>✏️ Édition manuelle de l'état</h3>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: '1px solid #374151', color: '#94a3b8',
+            borderRadius: 6, padding: '2px 10px', cursor: 'pointer', fontSize: 13,
+          }}>✕</button>
+        </div>
+
+        {/* Token Holder */}
+        <div style={sectionStyle}>
+          <div style={labelStyle}>🔑 Token Holder — processus qui possède le token</div>
+          <select value={tokenH} onChange={e => setTokenH(Number(e.target.value))}
+            style={{ background: '#1e293b', color: '#fbbf24', border: '1px solid #f59e0b',
+              borderRadius: 6, padding: '4px 10px', fontSize: 13 }}>
+            {snap.processes.map(p => <option key={p} value={p}>P{p}</option>)}
+          </select>
+        </div>
+
+        {/* RN */}
+        <div style={sectionStyle}>
+          <div style={{ ...labelStyle, color: '#a78bfa' }}>
+            RN[i][j] — plus grand sn reçu par Si de Sj
+          </div>
+          {snap.processes.map((pi, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ color: '#a78bfa', fontWeight: 700, minWidth: 50, fontSize: 12 }}>RN{pi}:</span>
+              {snap.processes.map((pj, j) => (
+                <div key={j} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: 9, color: '#64748b', marginBottom: 1 }}>P{pj}</span>
+                  <input type="number" min={0} max={99}
+                    value={rnValues[i][j]}
+                    onChange={e => {
+                      const v = parseInt(e.target.value) || 0
+                      setRnValues(prev => { const n = prev.map(r => [...r]); n[i][j] = v; return n })
+                    }}
+                    style={cellStyle}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* LN */}
+        <div style={sectionStyle}>
+          <div style={{ ...labelStyle, color: '#fb923c' }}>
+            LN[j] — dernier sn exécuté pour Sj (stocké dans le token)
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {snap.processes.map((pj, j) => (
+              <div key={j} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: 9, color: '#64748b', marginBottom: 1 }}>P{pj}</span>
+                <input type="number" min={0} max={99}
+                  value={lnValues[j]}
+                  onChange={e => {
+                    const v = parseInt(e.target.value) || 0
+                    setLnValues(prev => { const n = [...prev]; n[j] = v; return n })
+                  }}
+                  style={{ ...cellStyle, color: '#fb923c' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Q */}
+        <div style={sectionStyle}>
+          <div style={{ ...labelStyle, color: '#c084fc' }}>
+            Q — file d'attente (IDs séparés par virgules, ex: 2,3)
+          </div>
+          <input type="text" value={qValue} onChange={e => setQValue(e.target.value)}
+            placeholder="ex: 2,3  ou laisser vide"
+            style={{
+              width: '100%', background: '#1e293b', color: '#c084fc',
+              border: '1px solid #7c3aed', borderRadius: 6, padding: '6px 10px', fontSize: 14,
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>Vide = Q est ∅</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{
+            background: '#1e293b', color: '#94a3b8', border: '1px solid #334155',
+            borderRadius: 8, padding: '8px 20px', cursor: 'pointer', fontSize: 13,
+          }}>Annuler</button>
+          <button onClick={handleApply} style={{
+            background: '#2563eb', color: '#fff', border: 'none',
+            borderRadius: 8, padding: '8px 24px', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+          }}>✅ Appliquer</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NetworkCanvas
+// ═══════════════════════════════════════════════════════════════════════════════
+function NetworkCanvas() {
   const { state } = useSim()
-  const width = 900
-  const height = 500
-  const leftMargin = 120
-  const rightMargin = 20
-  const topMargin = 30
-  const bottomMargin = 20
+  const isSuzuki = state.algorithm === 'suzuki'
+
+  const [manualSnap, setManualSnap] = useState<SKSnapshot | null>(null)
+
+  const svgW = 960
+  const svgH = isSuzuki ? 720 : 500
+  const netCX = svgW / 2
+  const netCY = isSuzuki ? 265 : svgH / 2
+  const radius = isSuzuki ? 165 : Math.min(svgW, svgH) / 2 - 60
 
   const nodes = state.processes
   const steps = state.steps
-  const idx = state.index
-  const visibleSteps = steps.slice(0, idx)
+  const idx   = state.index
 
-  const laneHeight = Math.max(40, (height - topMargin - bottomMargin) / Math.max(1, nodes.length))
-  const usableWidth = width - leftMargin - rightMargin
-  const maxSteps = Math.max(1, steps.length)
-
-  function stepX(stepIndex: number) {
-    return leftMargin + (stepIndex / maxSteps) * usableWidth
-  }
-
-  function processY(i: number) {
-    return topMargin + i * laneHeight + laneHeight / 2
-  }
-
-  // collect message steps with their original index to place along time
-  const messages: Array<{ stepIndex: number; m: MessageStep }> = []
-  steps.forEach((s, i) => {
-    if ((s as any).type === 'message') messages.push({ stepIndex: i, m: s as MessageStep })
+  const positions = new Map<number, { x: number; y: number }>()
+  nodes.forEach((n, i) => {
+    const angle = (i * 2 * Math.PI) / Math.max(1, nodes.length) - Math.PI / 2
+    positions.set(n.id, { x: netCX + radius * Math.cos(angle), y: netCY + radius * Math.sin(angle) })
   })
 
-  // pair send/deliver steps: look for later message with same from/to/type
-  const pairs: Array<{ sendIndex: number; deliverIndex: number; send: MessageStep; deliver: MessageStep }> = []
+  // Snapshot courant
+  let autoSnap: SKSnapshot | null = null
+  let narText  = ''
+  let narPhase = 'INIT'
+
+  for (let i = idx - 1; i >= 0; i--) {
+    const s = steps[i] as any
+    if (s?.meta?.snapshot) { autoSnap = s.meta.snapshot; break }
+  }
+  if (!autoSnap && steps.length > 0) {
+    const s = steps[0] as any
+    if (s?.meta?.snapshot) autoSnap = s.meta.snapshot
+  }
+
+  const snap = manualSnap ?? autoSnap
+  const tokenHolderId = snap?.tokenHolder ?? nodes[0]?.id
+
+  const curStep = steps[idx - 1] as any
+  if (curStep?.type === 'narration') {
+    narText  = curStep.text || ''
+    narPhase = curStep.meta?.snapshot?.phase || 'INIT'
+  }
+
+  // Paires send/deliver
+  const messages: Array<{ stepIndex: number; m: MessageStep }> = []
+  steps.forEach((s, i) => { if ((s as any).type === 'message') messages.push({ stepIndex: i, m: s as MessageStep }) })
+
+  const pairs: Array<{ sendIndex: number; deliverIndex: number; send: MessageStep }> = []
   const used = new Set<number>()
   for (let i = 0; i < messages.length; i++) {
     if (used.has(i)) continue
@@ -87,123 +445,414 @@ function SequenceCanvas() {
     for (let j = i + 1; j < messages.length; j++) {
       if (used.has(j)) continue
       const mj = messages[j].m
-      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) {
-        found = j
-        break
-      }
+      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) { found = j; break }
     }
-    if (found !== -1) {
-      pairs.push({ sendIndex: sIdx, deliverIndex: messages[found].stepIndex, send: m, deliver: messages[found].m })
-      used.add(i)
-      used.add(found)
-    } else {
-      // no matching deliver found; treat as instantaneous at same step
-      pairs.push({ sendIndex: sIdx, deliverIndex: sIdx + 1, send: m, deliver: m })
-      used.add(i)
-    }
+    if (found !== -1) { pairs.push({ sendIndex: sIdx, deliverIndex: messages[found].stepIndex, send: m }); used.add(i); used.add(found) }
+    else { pairs.push({ sendIndex: sIdx, deliverIndex: sIdx + 1, send: m }); used.add(i) }
   }
 
-  // group all pairs by sender so outgoing arrows originate from the same tail point
-  type Group = { from: number; baseSendIndex: number; items: typeof pairs[0][] }
-  const groupsMap = new Map<number, typeof pairs[0][]>()
-  for (const p of pairs) {
-    const arr = groupsMap.get(p.send.from) || []
-    arr.push(p)
-    groupsMap.set(p.send.from, arr)
-  }
-  const groups: Group[] = []
-  for (const [from, items] of groupsMap.entries()) {
-    const baseSendIndex = items.reduce((min, it) => Math.min(min, it.sendIndex), Infinity)
-    groups.push({ from, baseSendIndex: baseSendIndex === Infinity ? 0 : baseSendIndex, items })
-  }
-
-  // helper to color by type
-  function colorFor(m: MessageStep) {
-    const t = String(m.msgType || '').toUpperCase()
-    if (t.includes('REQUEST')) return 'crimson'
-    if (t.includes('REPLY')) return 'seagreen'
-    return '#333'
-  }
+  const BG = '#ffff'
 
   return (
-    <svg width={width} height={height} style={{ background: '#fff' }}>
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      {/* Bouton Reset pour état manuel */}
+      {manualSnap && (
+        <button onClick={() => setManualSnap(null)} style={{
+          position: 'absolute', top: 10, right: 10, zIndex: 10,
+          background: '#1a0a0a', color: '#ef4444', border: '1.5px solid #ef4444',
+          borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+        }}>🔄 Reset</button>
+      )}
+
+      <svg width={svgW} height={svgH} style={{ background: BG, display: 'block' }}>
+        <defs>
+          {[
+            { id: 'arr-gold',   color: '#f59e0b' },
+            { id: 'arr-red',    color: '#ef4444' },
+            { id: 'arr-blue',   color: '#3b82f6' },
+            { id: 'arr-green',  color: '#22c55e' },
+            { id: 'arr-purple', color: '#a855f7' },
+            { id: 'arr-gray',   color: '#64748b' },
+          ].map(({ id, color }) => (
+            <marker key={id} id={id} viewBox="0 -5 10 10" refX="8" refY="0"
+              markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0,-5L10,0L0,5" fill={color} />
+            </marker>
+          ))}
+          <linearGradient id="tokenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#fbbf24" />
+            <stop offset="100%" stopColor="#f97316" />
+          </linearGradient>
+          <filter id="glowGold">
+            <feGaussianBlur stdDeviation="7" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowBlue">
+            <feGaussianBlur stdDeviation="3" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowRed">
+            <feGaussianBlur stdDeviation="5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        {/* Grille subtile */}
+        {isSuzuki && (
+          <g opacity={0.035}>
+            {Array.from({ length: 20 }, (_, i) => (
+              <line key={`gv${i}`} x1={i * 50} y1={0} x2={i * 50} y2={svgH} stroke="#60a5fa" strokeWidth={1} />
+            ))}
+            {Array.from({ length: 15 }, (_, i) => (
+              <line key={`gh${i}`} x1={0} y1={i * 50} x2={svgW} y2={i * 50} stroke="#60a5fa" strokeWidth={1} />
+            ))}
+          </g>
+        )}
+
+        {/* Connexions fond */}
+        <g opacity={0.2}>
+          {nodes.map((n1, i) => nodes.map((n2, j) => {
+            if (j <= i) return null
+            const p1 = positions.get(n1.id), p2 = positions.get(n2.id)
+            if (!p1 || !p2) return null
+            return <line key={`bg-${i}-${j}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+              stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 6" />
+          }))}
+        </g>
+
+        {/* ═══ MESSAGES ═══ */}
+        <g>
+          {pairs.map((pair, pairIdx) => {
+            const { sendIndex, deliverIndex, send } = pair
+            if (sendIndex >= idx) return null
+            const p1 = positions.get(send.from), p2 = positions.get(send.to)
+            if (!p1 || !p2) return null
+
+            const color   = colorFor(send)
+            const msgType = String(send.msgType).toUpperCase()
+            const isToken   = msgType.includes('SK_TOKEN')
+            const isRequest = msgType.includes('SK_REQUEST')
+            const meta      = (send as any).meta
+            const seqNum    = meta?.seqNum
+
+            let marker = 'arr-gray'
+            if (isToken)        marker = 'arr-gold'
+            else if (isRequest) marker = 'arr-red'
+
+            const msgLabel = isSuzuki
+              ? (isToken ? '📦 TOKEN' : seqNum !== undefined ? `REQUEST(${send.from}, ${seqNum})` : send.msgType)
+              : send.msgType
+            const lw = Math.max(70, msgLabel.length * 7)
+
+            if (deliverIndex <= idx) {
+              const curve = getCurve(p1, p2, 1, 60)
+              return (
+                <g key={`del-${pairIdx}`}>
+                  <path d={curve.path}
+                    stroke={isToken ? 'url(#tokenGrad)' : color}
+                    strokeWidth={isToken ? 3 : 2}
+                    fill="none" opacity={0.75}
+                    markerEnd={`url(#${marker})`}
+                    filter={isToken ? 'url(#glowGold)' : isRequest ? 'url(#glowRed)' : undefined}
+                  />
+                  {curve.midX !== undefined && (
+                    <g>
+                      {/* Fond bleu ardoise lisible */}
+                      <rect x={(curve.midX ?? 0) - lw / 2 - 3} y={(curve.midY ?? 0) - 13}
+                        width={lw + 6} height={19} rx={5}
+                        fill="#1e3a5f" stroke={color} strokeWidth={1.5} />
+                      <text x={curve.midX} y={(curve.midY ?? 0) + 3}
+                        fontSize={10} textAnchor="middle"
+                        fill={isToken ? '#fbbf24' : '#f1f5f9'} fontWeight="bold">
+                        {msgLabel}
+                      </text>
+                    </g>
+                  )}
+                </g>
+              )
+            } else {
+              const progress = Math.max(0, Math.min(0.95, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
+              const curve = getCurve(p1, p2, progress, 60)
+              const hx = curve.head.x, hy = curve.head.y
+              return (
+                <g key={`fly-${pairIdx}`}>
+                  <path d={curve.path}
+                    stroke={isToken ? 'url(#tokenGrad)' : color}
+                    strokeWidth={isToken ? 4 : 2.5}
+                    fill="none" strokeDasharray="7 4"
+                    markerEnd={`url(#${marker})`}
+                    filter={isToken ? 'url(#glowGold)' : isRequest ? 'url(#glowRed)' : undefined}
+                  />
+                  <circle cx={hx} cy={hy} r={isToken ? 10 : 7}
+                    fill={isToken ? 'url(#tokenGrad)' : color}
+                    filter={isToken ? 'url(#glowGold)' : undefined}
+                  />
+                  {/* Label sur fond bleu ardoise bien lisible */}
+                  <rect x={hx - lw / 2 - 3} y={hy - 30} width={lw + 6} height={19} rx={5}
+                    fill="#1e3a5f" stroke={color} strokeWidth={1.5} />
+                  <text x={hx} y={hy - 15}
+                    fontSize={10} textAnchor="middle"
+                    fill={isToken ? '#fbbf24' : '#f1f5f9'} fontWeight="bold">
+                    {msgLabel}
+                  </text>
+                </g>
+              )
+            }
+          })}
+        </g>
+
+        {/* ═══ TABLEAUX RN ═══ */}
+        {isSuzuki && nodes.map((n, ni) => {
+          const pos = positions.get(n.id)
+          if (!pos) return null
+          const rnRow = snap?.RN?.[ni] ?? new Array(nodes.length).fill(0)
+          const procs = snap?.processes ?? nodes.map(nn => nn.id)
+          const N = nodes.length
+          const angle = (ni * 2 * Math.PI) / Math.max(1, N) - Math.PI / 2
+          const dist  = radius + 92
+          const rawX  = netCX + dist * Math.cos(angle)
+          const rawY  = netCY + dist * Math.sin(angle)
+          const tableW = N * 30 + 20
+          const tx = rawX - tableW / 2
+          const ty = rawY - 35
+          const hlJ = (snap?.highlight?.rnCell?.i === ni) ? snap?.highlight?.rnCell?.j : undefined
+
+          return (
+            <SVGRNTable
+              key={`rn-${n.id}`}
+              x={tx} y={ty}
+              processId={n.id}
+              rnRow={rnRow}
+              processes={procs}
+              highlight={hlJ !== undefined ? { j: hlJ } : undefined}
+            />
+          )
+        })}
+
+        {/* ═══ NOEUDS ═══ */}
+        <g>
+          {nodes.map(n => {
+            const pos = positions.get(n.id)
+            if (!pos) return null
+            const hasToken = (snap ? snap.tokenHolder === n.id : n.id === tokenHolderId)
+                          || n.badges?.token === '🔑'
+            const inCS = n.badges?.cs === 'CS'
+
+            let nodeFill    = '#0f2040'
+            let nodeStroke  = '#3b82f6'
+            let nodeStrokeW = 2.5
+            let textColor   = '#e2e8f0'
+
+            if (hasToken && inCS)  { nodeFill = '#7c2d12'; nodeStroke = '#ef4444'; nodeStrokeW = 4; textColor = '#fff' }
+            else if (hasToken)     { nodeFill = '#78350f'; nodeStroke = '#f59e0b'; nodeStrokeW = 4; textColor = '#fef3c7' }
+            else if (n.color && !['skyblue','#fff','#12122a'].includes(n.color)) { nodeFill = n.color }
+
+            const N    = snap?.processes?.length ?? nodes.length
+            const panW = Math.max(150, N * 30 + 36)
+            const panH = 140
+            // Décalage important : +60px depuis le bord du nœud (r=30)
+            const offX = pos.x > netCX ? -(panW + 65) : 65
+            const panX = pos.x + offX
+            const panY = pos.y - panH / 2
+
+            return (
+              <g key={n.id}>
+                {/* Panneau TOKEN */}
+                {isSuzuki && hasToken && snap && (
+                  <SVGTokenPanel
+                    x={panX} y={panY}
+                    LN={snap.LN} Q={snap.Q}
+                    processes={snap.processes}
+                    highlight={snap.highlight?.lnCell}
+                  />
+                )}
+                {/* Ligne pointillée panneau → nœud */}
+                {isSuzuki && hasToken && snap && (
+                  <line
+                    x1={pos.x > netCX ? panX + panW : panX}
+                    y1={panY + panH / 2}
+                    x2={pos.x}
+                    y2={pos.y}
+                    stroke="#f59e0b" strokeWidth={1} strokeDasharray="4 4" opacity={0.35}
+                  />
+                )}
+
+                {/* Nœud */}
+                <g transform={`translate(${pos.x}, ${pos.y})`}>
+                  {inCS && <circle r={44} fill="none" stroke="#ef4444" strokeWidth={2.5}
+                    strokeDasharray="6 4" opacity={0.6} />}
+                  {hasToken && !inCS && (
+                    <circle r={40} fill="none" stroke="#f59e0b" strokeWidth={1.5}
+                      opacity={0.25} strokeDasharray="5 3" />
+                  )}
+                  <circle r={30} fill={nodeFill} stroke={nodeStroke} strokeWidth={nodeStrokeW}
+                    filter={hasToken ? 'url(#glowGold)' : 'url(#glowBlue)'}
+                  />
+                  <text y={5} fontSize={14} fontWeight={700} textAnchor="middle" fill={textColor}>
+                    {n.label ?? `P${n.id}`}
+                  </text>
+                  {inCS && (
+                    <g>
+                      <rect x={-18} y={16} width={36} height={15} rx={4} fill="#ef4444" />
+                      <text y={27} textAnchor="middle" fontSize={9} fontWeight="bold" fill="#fff">SC</text>
+                    </g>
+                  )}
+                </g>
+
+                {/* 🔑 Badge bien écarté: décalé de +50px horizontal et -45px vertical */}
+                {hasToken && (
+                  <TokenBadge x={pos.x + 50} y={pos.y - 45} />
+                )}
+              </g>
+            )
+          })}
+        </g>
+
+        {/* ═══ LÉGENDE ═══ */}
+        {isSuzuki && (
+          <g transform="translate(10, 10)">
+            <rect x={0} y={0} width={300} height={118} rx={9}
+              fill="#0f2040" stroke="#1e3a5f" strokeWidth={1.5} opacity={0.97} />
+            <text x={12} y={19} fontSize={12} fontWeight="bold" fill="#93c5fd">
+              🎓 Suzuki-Kasami — Structures
+            </text>
+            {[
+              { y: 30, bg: '#1e1b4b', label: 'RN[i][j]', lw: 58, lc: '#a78bfa', desc: '= max sn reçu par Si de Sj' },
+              { y: 52, bg: '#1c1003', label: 'LN[j]',    lw: 42, lc: '#fb923c', desc: '= dernier sn exécuté pour Sj (token)' },
+              { y: 74, bg: '#1a0033', label: 'Q',         lw: 14, lc: '#c084fc', desc: '= file des sites en attente du token' },
+              { y: 96, bg: '#0d1b2a', label: 'REQUEST(i,sn)', lw: 88, lc: '#ef4444', desc: '→ broadcast | TOKEN → unicast' },
+            ].map(({ y, bg, label, lw, lc, desc }) => (
+              <g key={y}>
+                <rect x={10} y={y} width={280} height={19} rx={4} fill={bg} />
+                <text x={16} y={y + 13} fontSize={10} fontWeight="bold" fill={lc}>{label}</text>
+                <text x={16 + lw + 4} y={y + 13} fontSize={10} fill="#cbd5e1">{desc}</text>
+              </g>
+            ))}
+          </g>
+        )}
+
+        {/* ═══ EXPLICATION BAS ═══ */}
+        {isSuzuki && narText && (
+          <ExplanationPanel
+            x={10} y={svgH - 135}
+            width={svgW - 20}
+            text={narText}
+            phase={narPhase}
+          />
+        )}
+
+        {/* Indicateur état manuel */}
+        {manualSnap && (
+          <g transform={`translate(${svgW / 2 - 95}, 10)`}>
+            <rect x={0} y={0} width={190} height={24} rx={6} fill="#7c2d12" stroke="#ef4444" strokeWidth={1.5} />
+            <text x={95} y={16} textAnchor="middle" fontSize={10} fontWeight="bold" fill="#fca5a5">
+              ✏️ État modifié manuellement
+            </text>
+          </g>
+        )}
+      </svg>
+    </div>
+  )
+}
+
+// ─── SequenceCanvas ───────────────────────────────────────────────────────────
+function SequenceCanvas() {
+  const { state } = useSim()
+  const W = 960, H = 500
+  const lM = 120, rM = 20, tM = 30
+
+  const nodes = state.processes
+  const steps = state.steps
+  const idx   = state.index
+
+  const laneH   = Math.max(40, (H - tM - 20) / Math.max(1, nodes.length))
+  const usableW = W - lM - rM
+  const maxS    = Math.max(1, steps.length)
+  const stepX   = (si: number) => lM + (si / maxS) * usableW
+  const procY   = (i:  number) => tM + i * laneH + laneH / 2
+
+  const messages: Array<{ stepIndex: number; m: MessageStep }> = []
+  steps.forEach((s, i) => { if ((s as any).type === 'message') messages.push({ stepIndex: i, m: s as MessageStep }) })
+
+  const pairs: Array<{ sendIndex: number; deliverIndex: number; send: MessageStep }> = []
+  const used = new Set<number>()
+  for (let i = 0; i < messages.length; i++) {
+    if (used.has(i)) continue
+    const { stepIndex: sIdx, m } = messages[i]
+    let found = -1
+    for (let j = i + 1; j < messages.length; j++) {
+      if (used.has(j)) continue
+      const mj = messages[j].m
+      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) { found = j; break }
+    }
+    if (found !== -1) { pairs.push({ sendIndex: sIdx, deliverIndex: messages[found].stepIndex, send: m }); used.add(i); used.add(found) }
+    else { pairs.push({ sendIndex: sIdx, deliverIndex: sIdx + 1, send: m }); used.add(i) }
+  }
+
+  const groupsMap = new Map<number, typeof pairs[0][]>()
+  for (const p of pairs) { const a = groupsMap.get(p.send.from) || []; a.push(p); groupsMap.set(p.send.from, a) }
+  const groups = Array.from(groupsMap.entries()).map(([from, items]) => ({
+    from, baseSendIndex: items.reduce((mn, it) => Math.min(mn, it.sendIndex), Infinity), items,
+  }))
+
+  return (
+    <svg width={W} height={H} style={{ background: '#fff' }}>
       <defs>
         <marker id="arrow" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M0,-5L10,0L0,5" fill="#000" />
         </marker>
       </defs>
-
-      {/* time axis */}
       <g>
-        <line x1={leftMargin} y1={topMargin - 10} x2={width - rightMargin} y2={topMargin - 10} stroke="#ddd" />
-        {Array.from({ length: Math.min(20, maxSteps) }).map((_, i) => {
-          const sx = leftMargin + (i / Math.min(20, maxSteps)) * usableWidth
-          return <line key={i} x1={sx} y1={topMargin - 14} x2={sx} y2={topMargin - 6} stroke="#ccc" />
-        })}
-        <text x={leftMargin} y={topMargin - 18} fontSize={12} fontWeight={600}>Time / Steps</text>
+        <line x1={lM} y1={tM - 10} x2={W - rM} y2={tM - 10} stroke="#ddd" />
+        <text x={lM} y={tM - 18} fontSize={12} fontWeight={600}>Time / Steps</text>
       </g>
-
-      {/* lanes and process labels */}
       <g>
         {nodes.map((n, i) => {
-          const y = processY(i)
+          const y = procY(i)
           return (
             <g key={n.id}>
-              <text x={10} y={y + 5} fontSize={13} fontWeight={600}>{n.label ?? `P${n.id}`}</text>
-              <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#e6e6e6" strokeWidth={2} />
-              {/* CS indicator */}
-              {n.color === 'orange' && (
-                <rect x={width - rightMargin - 60} y={y - 12} rx={4} width={48} height={24} fill="orange" stroke="#b85" />
-              )}
+              <text x={10} y={y + 5} fontSize={13} fontWeight={600}>
+                {n.label ?? `P${n.id}`}
+                {n.badges?.token === '🔑' && <tspan dx={4}>🔑</tspan>}
+              </text>
+              <line x1={lM} y1={y} x2={W - rM} y2={y} stroke="#e6e6e6" strokeWidth={2} />
             </g>
           )
         })}
       </g>
-
-      {/* messages for visible steps (paired send -> deliver), grouped by sender so tails share same origin */}
       <g>
-        {groups.map((g, gi) => {
-          const baseSendIndex = g.baseSendIndex
-          const senderIndex = nodes.findIndex((p) => p.id === g.from)
-          if (senderIndex === -1) return null
-          const x1 = stepX(baseSendIndex)
-          const y1 = processY(senderIndex)
+        {groups.map(g => {
+          const si = nodes.findIndex(p => p.id === g.from)
+          if (si === -1) return null
+          const x1 = stepX(g.baseSendIndex === Infinity ? 0 : g.baseSendIndex)
+          const y1 = procY(si)
           return (
-            <g key={`group-${g.from}-${baseSendIndex}`}>
+            <g key={`g-${g.from}`}>
               {g.items.map((pair, i) => {
                 const { sendIndex, deliverIndex, send } = pair
-                // if the logical send happened after current time, hide
                 if (sendIndex >= idx) return null
-                const toIndex = nodes.findIndex((p) => p.id === send.to)
-                if (toIndex === -1) return null
-                const x2 = stepX(deliverIndex)
-                const y2 = processY(toIndex)
+                const ti = nodes.findIndex(p => p.id === send.to)
+                if (ti === -1) return null
+                const x2 = stepX(deliverIndex), y2 = procY(ti)
                 const color = colorFor(send)
-
-                // draw straight diagonal lines from single shared origin (x1,y1) to destination (x2,y2)
-                const originX = x1
-                const originY = y1
                 if (deliverIndex <= idx) {
-                  const mx = (originX + x2) / 2
-                  const my = (originY + y2) / 2
+                  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
                   return (
-                    <g key={`${send.id}-${pair.deliver.id}`}>
-                      <line x1={originX} y1={originY} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} />
-                      <rect x={mx - 28} y={my - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
-                      <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
+                    <g key={`${send.id}-d`}>
+                      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd="url(#arrow)" />
+                      <rect x={mx - 30} y={my - 12} rx={6} width={60} height={20} fill="#fff" stroke={color} />
+                      <text x={mx} y={my + 5} fontSize={10} textAnchor="middle" fill="#000">{send.msgType}</text>
                     </g>
                   )
                 } else {
-                  const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
-                  const cx2 = originX + (x2 - originX) * progress
-                  const cy2 = originY + (y2 - originY) * progress
-                  const mx2 = (originX + cx2) / 2
-                  const my2 = (originY + cy2) / 2
+                  const pr = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
+                  const cx2 = x1 + (x2 - x1) * pr, cy2 = y1 + (y2 - y1) * pr
+                  const mx = (x1 + cx2) / 2, my = (y1 + cy2) / 2
                   return (
-                    <g key={`${send.id}-inflight-${i}`}>
-                      <line x1={originX} y1={originY} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} strokeDasharray="4 3" />
-                      <rect x={mx2 - 28} y={my2 - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
-                      <text x={mx2} y={my2 + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
+                    <g key={`${send.id}-f-${i}`}>
+                      <line x1={x1} y1={y1} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd="url(#arrow)" strokeDasharray="4 3" />
+                      <rect x={mx - 30} y={my - 12} rx={6} width={60} height={20} fill="#fff" stroke={color} />
+                      <text x={mx} y={my + 5} fontSize={10} textAnchor="middle" fill="#000">{send.msgType}</text>
                     </g>
                   )
                 }
@@ -216,174 +865,9 @@ function SequenceCanvas() {
   )
 }
 
-function NetworkCanvas() {
-  const { state } = useSim()
-  const width = 900
-  const height = 500
-  const cx = width / 2
-  const cy = height / 2
-  const radius = Math.min(width, height) / 2 - 60
-
-  const nodes = state.processes
-  const steps = state.steps
-  const idx = state.index
-
-  // precalculate node positions
-  const positions = new Map<number, { x: number; y: number }>()
-  nodes.forEach((n, i) => {
-    const angle = (i * 2 * Math.PI) / Math.max(1, nodes.length) - Math.PI / 2
-    positions.set(n.id, {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    })
-  })
-
-  const messages: Array<{ stepIndex: number; m: MessageStep }> = []
-  steps.forEach((s, i) => {
-    if ((s as any).type === 'message') messages.push({ stepIndex: i, m: s as MessageStep })
-  })
-
-  const pairs: Array<{ sendIndex: number; deliverIndex: number; send: MessageStep; deliver: MessageStep }> = []
-  const used = new Set<number>()
-  for (let i = 0; i < messages.length; i++) {
-    if (used.has(i)) continue
-    const { stepIndex: sIdx, m } = messages[i]
-    let found = -1
-    for (let j = i + 1; j < messages.length; j++) {
-      if (used.has(j)) continue
-      const mj = messages[j].m
-      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) {
-        found = j
-        break
-      }
-    }
-    if (found !== -1) {
-      pairs.push({ sendIndex: sIdx, deliverIndex: messages[found].stepIndex, send: m, deliver: messages[found].m })
-      used.add(i)
-      used.add(found)
-    } else {
-      pairs.push({ sendIndex: sIdx, deliverIndex: sIdx + 1, send: m, deliver: m })
-      used.add(i)
-    }
-  }
-
-  return (
-    <svg width={width} height={height} style={{ background: '#fff' }}>
-      <defs>
-        <marker id="net-arrow-orange" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="orange" /></marker>
-        <marker id="net-arrow-green" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="green" /></marker>
-        <marker id="net-arrow-purple" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="purple" /></marker>
-        <marker id="net-arrow-default" viewBox="0 -5 10 10" refX="5" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="#333" /></marker>
-      </defs>
-
-      {/* Messages */}
-      <g>
-        {pairs.map((pair, i) => {
-          const { sendIndex, deliverIndex, send } = pair
-          if (sendIndex >= idx) return null // future
-
-          const p1 = positions.get(send.from)
-          const p2 = positions.get(send.to)
-          if (!p1 || !p2) return null
-
-          const color = colorFor(send)
-          let markerId = 'net-arrow-default'
-          if (color === 'orange') markerId = 'net-arrow-orange'
-          if (color === 'green') markerId = 'net-arrow-green'
-          if (color === 'purple') markerId = 'net-arrow-purple'
-
-          let offsetMag = 40
-          if (send.msgType === 'BULLY_COORD') offsetMag = 80
-
-          if (deliverIndex <= idx) {
-            const curve = getCurve(p1, p2, 1, offsetMag)
-            return (
-              <g key={`del-${i}`}>
-                <path
-                  d={curve.path}
-                  stroke={color}
-                  strokeWidth={1.5}
-                  fill="none"
-                  opacity={0.4}
-                  markerEnd={`url(#${markerId})`}
-                />
-                <text x={curve.midX} y={(curve.midY ?? 0) + 3} fontSize={10} textAnchor="middle" fill={color} opacity={0.8} fontWeight="bold">
-                  {send.msgType}
-                </text>
-              </g>
-            )
-          } else {
-            // in-flight message
-            const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
-            const curve = getCurve(p1, p2, progress, offsetMag)
-            const cx2 = curve.head.x
-            const cy2 = curve.head.y
-            
-            return (
-              <g key={`inflight-${i}`}>
-                <path
-                  d={curve.path}
-                  stroke={color}
-                  strokeWidth={2}
-                  fill="none"
-                  strokeDasharray="4 4"
-                  markerEnd={`url(#${markerId})`}
-                />
-                <circle cx={cx2} cy={cy2} r={4} fill={color} />
-                <rect x={cx2 + 5} y={cy2 - 10} rx={4} width={Math.max(50, String(send.msgType).length * 8)} height={18} fill="#fff" opacity={0.8} />
-                <text x={cx2 + Math.max(50, String(send.msgType).length * 8) / 2 + 5} y={cy2 + 3} fontSize={10} textAnchor="middle" fill="#000" fontWeight="bold">
-                  {send.msgType}
-                </text>
-              </g>
-            )
-          }
-        })}
-      </g>
-
-      {/* Nodes */}
-      <g>
-        {nodes.map(n => {
-          const pos = positions.get(n.id)
-          if (!pos) return null
-          
-          // use the color assigned by the algorithm (e.g. purple for leader, orange for token holder)
-          // Default to white fill with blue stroke
-          const isHighlight = n.color && n.color !== 'skyblue' && n.color !== '#fff'
-          const fill = isHighlight ? n.color : '#fff'
-          const stroke = isHighlight ? '#333' : '#4dabf7'
-          const textColor = isHighlight ? '#fff' : '#000'
-
-          return (
-            <g key={n.id} transform={`translate(${pos.x}, ${pos.y})`}>
-              <circle
-                r={20}
-                fill={fill}
-                stroke={stroke}
-                strokeWidth={3}
-              />
-              <text
-                y={5}
-                fontSize={14}
-                fontWeight={700}
-                textAnchor="middle"
-                fill={textColor}
-              >
-                {n.label ?? `P${n.id}`}
-              </text>
-            </g>
-          )
-        })}
-      </g>
-    </svg>
-  )
-}
-
 export default function GraphCanvas() {
   const { state } = useSim()
-
-  if (state.algorithm === 'bully' || state.algorithm === 'token') {
-    return <NetworkCanvas />
-  }
-
-  return <SequenceCanvas />
+  return (state.algorithm === 'bully' || state.algorithm === 'token' || state.algorithm === 'suzuki')
+    ? <NetworkCanvas />
+    : <SequenceCanvas />
 }
