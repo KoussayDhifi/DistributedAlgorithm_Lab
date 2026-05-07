@@ -12,6 +12,7 @@ type Props = {
   onRunRingElection?: (variant: RingVariant, initiators: number[], customIds: number[]) => void
   onBullyElection: () => void
   onSuzukiRequest: () => void
+  onLamportScenario: () => void
   onVectorScenario: () => void
   onMatrixScenario: () => void
   processes: number[]
@@ -31,7 +32,7 @@ type Props = {
 
 export default function ControlPanel({
   onStart, onStop, onRequestCS, onPassToken, onStep, onRunRingElection, onBullyElection, onSuzukiRequest,
-  onVectorScenario, onMatrixScenario,
+  onLamportScenario, onVectorScenario, onMatrixScenario,
   processes, selectedProcess, setSelectedProcess,
   autoRun, setAutoRun, speed, setSpeed,
   algorithm, setAlgorithm,
@@ -54,6 +55,7 @@ export default function ControlPanel({
           { value: 'token', label: 'Token Ring' },
           { value: 'bully', label: 'Bully Election' },
           { value: 'ring', label: 'Ring Election' },
+          { value: 'lamport', label: 'Horloge de Lamport' },
           { value: 'vector', label: 'Horloge Vectorielle (Mattern)' },
           { value: 'matrix', label: 'Horloge Matricielle' },
           { value: 'suzuki', label: 'Suzuki-Kasami' },
@@ -99,6 +101,7 @@ export default function ControlPanel({
           {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
           {algorithm === 'bully' && <Button onClick={onBullyElection}>Start Bully Election</Button>}
           {algorithm === 'suzuki' && <Button onClick={onSuzukiRequest}>Request CS (Suzuki-Kasami)</Button>}
+          {algorithm === 'lamport' && <Button onClick={onLamportScenario}>New Random Scenario</Button>}
           {algorithm === 'vector' && <Button onClick={onVectorScenario}>New Random Scenario</Button>}
           {algorithm === 'matrix' && <Button onClick={onMatrixScenario}>New Causal Delivery Scenario</Button>}
 
