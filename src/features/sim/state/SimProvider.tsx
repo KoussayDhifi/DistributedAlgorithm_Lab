@@ -8,6 +8,7 @@ type SimState = {
   playing: boolean
   speed: number // ms per step when playing
   algorithm?: string
+  selectedProcess?: number
 }
 
 const initialState: SimState = {
@@ -28,6 +29,7 @@ type Action =
   | { type: 'SET_INDEX'; index: number }
   | { type: 'SET_SPEED'; speed: number }
   | { type: 'SET_ALGORITHM'; algorithm: string }
+  | { type: 'SET_SELECTED_PROCESS'; id: number }
   | { type: 'RESET' }
   | { type: 'RESET_STATE' }
 
@@ -51,6 +53,8 @@ function reducer(state: SimState, action: Action): SimState {
       return { ...state, speed: action.speed }
     case 'SET_ALGORITHM':
       return { ...state, algorithm: action.algorithm }
+    case 'SET_SELECTED_PROCESS':
+      return { ...state, selectedProcess: action.id }
     case 'RESET':
       return { ...initialState, speed: state.speed, algorithm: state.algorithm }
     case 'RESET_STATE':
@@ -85,6 +89,12 @@ export function SimProvider({ children }: { children: ReactNode }) {
       if (typeof algo === 'string') dispatch({ type: 'SET_ALGORITHM', algorithm: algo })
     }
     window.addEventListener('sim:set_algorithm', handlerSetAlgo)
+    
+    function handlerSetSelected(e: any) {
+      if (typeof e?.detail === 'number') dispatch({ type: 'SET_SELECTED_PROCESS', id: e.detail })
+    }
+    window.addEventListener('sim:set_selected_process', handlerSetSelected)
+
     function handlerReset() {
       dispatch({ type: 'RESET' })
     }
@@ -93,6 +103,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('sim:init_processes', handler)
       window.removeEventListener('sim:load_cinema', handlerLoad)
       window.removeEventListener('sim:set_algorithm', handlerSetAlgo)
+      window.removeEventListener('sim:set_selected_process', handlerSetSelected)
       window.removeEventListener('sim:reset', handlerReset)
     }
   }, [])

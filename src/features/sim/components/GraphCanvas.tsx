@@ -539,6 +539,10 @@ function NetworkCanvas() {
             <feGaussianBlur stdDeviation="5" result="b"/>
             <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
+          <filter id="glowGreen">
+            <feGaussianBlur stdDeviation="5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
         </defs>
 
         {/* Grille subtile */}
@@ -678,8 +682,15 @@ function NetworkCanvas() {
           {nodes.map(n => {
             const pos = positions.get(n.id)
             if (!pos) return null
-            const hasToken = (snap ? snap.tokenHolder === n.id : n.id === tokenHolderId)
-                          || n.badges?.token === '🔑'
+            
+            let hasToken = false;
+            if (isSuzuki) {
+              hasToken = snap ? snap.tokenHolder === n.id : n.id === tokenHolderId;
+            } else if (state.algorithm === 'token') {
+              hasToken = n.color === 'orange' || n.badges?.token === '🔑';
+            } else {
+              hasToken = n.badges?.token === '🔑';
+            }
             const inCS = n.badges?.cs === 'CS'
 
             let nodeFill    = '#0f2040'
@@ -723,14 +734,19 @@ function NetworkCanvas() {
 
                 {/* Nœud */}
                 <g transform={`translate(${pos.x}, ${pos.y})`}>
+                  {state.selectedProcess === n.id && (
+                    <circle r={50} fill="none" stroke="#22c55e" strokeWidth={2} strokeDasharray="6 4" opacity={0.6}>
+                       <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="8s" repeatCount="indefinite" />
+                    </circle>
+                  )}
                   {inCS && <circle r={44} fill="none" stroke="#ef4444" strokeWidth={2.5}
                     strokeDasharray="6 4" opacity={0.6} />}
                   {hasToken && !inCS && (
                     <circle r={40} fill="none" stroke="#f59e0b" strokeWidth={1.5}
                       opacity={0.25} strokeDasharray="5 3" />
                   )}
-                  <circle r={30} fill={nodeFill} stroke={nodeStroke} strokeWidth={nodeStrokeW}
-                    filter={hasToken ? 'url(#glowGold)' : 'url(#glowBlue)'}
+                  <circle r={30} fill={nodeFill} stroke={state.selectedProcess === n.id ? '#22c55e' : nodeStroke} strokeWidth={state.selectedProcess === n.id ? 4 : nodeStrokeW}
+                    filter={hasToken ? 'url(#glowGold)' : state.selectedProcess === n.id ? 'url(#glowGreen)' : 'url(#glowBlue)'}
                   />
                   <text y={5} fontSize={14} fontWeight={700} textAnchor="middle" fill={textColor}>
                     {n.label ?? `P${n.id}`}
