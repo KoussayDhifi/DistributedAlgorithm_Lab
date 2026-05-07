@@ -12,6 +12,8 @@ type Props = {
   onRunRingElection?: (variant: RingVariant, initiators: number[], customIds: number[]) => void
   onBullyElection: () => void
   onSuzukiRequest: () => void
+  onVectorScenario: () => void
+  onMatrixScenario: () => void
   processes: number[]
   selectedProcess: number
   setSelectedProcess: (id: number) => void
@@ -29,6 +31,7 @@ type Props = {
 
 export default function ControlPanel({
   onStart, onStop, onRequestCS, onPassToken, onStep, onRunRingElection, onBullyElection, onSuzukiRequest,
+  onVectorScenario, onMatrixScenario,
   processes, selectedProcess, setSelectedProcess,
   autoRun, setAutoRun, speed, setSpeed,
   algorithm, setAlgorithm,
@@ -47,10 +50,12 @@ export default function ControlPanel({
         value={algorithm}
         onChange={(v) => setAlgorithm(String(v))}
         data={[
-          { value: 'ricart', label: 'Ricart–Agrawala' },
-          { value: 'token',  label: 'Token Ring' },
-          { value: 'bully',  label: 'Bully Election' },
-          { value: 'ring',   label: 'Ring Election' },
+          { value: 'ricart', label: 'Ricart-Agrawala' },
+          { value: 'token', label: 'Token Ring' },
+          { value: 'bully', label: 'Bully Election' },
+          { value: 'ring', label: 'Ring Election' },
+          { value: 'vector', label: 'Horloge Vectorielle (Mattern)' },
+          { value: 'matrix', label: 'Horloge Matricielle' },
           { value: 'suzuki', label: 'Suzuki-Kasami' },
         ]}
       />
@@ -61,16 +66,14 @@ export default function ControlPanel({
         max={50}
         onChange={(v) => setNumberOfProcesses(Number(v) || 1)}
       />
-      
-      {/* Afficher les contrôles Ring Election uniquement si l'algorithme est Ring */}
+
       {algorithm === 'ring' && onRunRingElection && (
         <RingElectionControls
           numberOfProcesses={numberOfProcesses}
           onRunElection={onRunRingElection}
         />
       )}
-      
-      {/* Afficher les contrôles classiques pour les autres algorithmes */}
+
       {algorithm !== 'ring' && (
         <>
           <Select
@@ -91,10 +94,14 @@ export default function ControlPanel({
             <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
           </Group>
           <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
-          {algorithm === 'ricart'  && <Button onClick={onRequestCS}>Request CS (Ricart–Agrawala)</Button>}
-          {algorithm === 'token'   && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
-          {algorithm === 'bully'   && <Button onClick={onBullyElection}>Start Bully Election</Button>}
-          {algorithm === 'suzuki'  && <Button onClick={onSuzukiRequest}>Request CS (Suzuki-Kasami)</Button>}
+
+          {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart-Agrawala)</Button>}
+          {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
+          {algorithm === 'bully' && <Button onClick={onBullyElection}>Start Bully Election</Button>}
+          {algorithm === 'suzuki' && <Button onClick={onSuzukiRequest}>Request CS (Suzuki-Kasami)</Button>}
+          {algorithm === 'vector' && <Button onClick={onVectorScenario}>New Random Scenario</Button>}
+          {algorithm === 'matrix' && <Button onClick={onMatrixScenario}>New Causal Delivery Scenario</Button>}
+
           <Group>
             <Button onClick={onStep}>Step</Button>
           </Group>

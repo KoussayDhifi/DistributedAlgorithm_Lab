@@ -79,6 +79,21 @@ export default function App() {
     }
     // suzuki : pas de sim en temps réel, uniquement cinema
 
+    // initialize SimProvider processes
+    try {
+      // dynamic import to avoid circular during boot
+      const payload = processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
+      window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
+    } catch (e) {
+      // ignore
+    }
+
+    if (algorithm === 'vector') {
+      loadVectorClockScenario()
+    } else if (algorithm === 'matrix') {
+      loadMatrixClockScenario()
+    }
+
     if (autoRun) sim.start(speed)
 
     // Notifier le provider
@@ -303,6 +318,37 @@ export default function App() {
       window.removeEventListener('sim:narration', handleNarration)
     }
   }, [])
+  async function loadVectorClockScenario() {
+    try {
+      const { generateVectorClockCinema } = await import('./features/sim/algorithms/vectorClockCinema')
+      const payload = generateVectorClockCinema(processes.map((p) => p.id))
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded random Vector Clock (Mattern) scenario')
+    } catch (e) {
+      appendLog('Failed to load vector clock scenario: ' + String(e))
+    }
+  }
+
+  async function loadMatrixClockScenario() {
+    try {
+      const { generateMatrixClockCinema } = await import('./features/sim/algorithms/matrixClockCinema')
+      const payload = generateMatrixClockCinema(processes.map((p) => p.id))
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded Matrix Clock causal-delivery scenario')
+    } catch (e) {
+      appendLog('Failed to load matrix clock scenario: ' + String(e))
+    }
+  }
+
+  useEffect(() => {
+    if (algorithm !== 'vector') return
+    loadVectorClockScenario()
+  }, [algorithm, processes])
+
+  useEffect(() => {
+    if (algorithm !== 'matrix') return
+    loadMatrixClockScenario()
+  }, [algorithm, processes])
 
   return (
     <SimProvider>
@@ -321,6 +367,8 @@ export default function App() {
                   onRunRingElection={runRingElection}
                   onBullyElection={startBullyElection}
                   onSuzukiRequest={requestSuzuki}
+                  onVectorScenario={loadVectorClockScenario}
+                  onMatrixScenario={loadMatrixClockScenario}
                   processes={processes.map((p) => p.id)}
                   selectedProcess={selectedProcess}
                   setSelectedProcess={setSelectedProcess}
