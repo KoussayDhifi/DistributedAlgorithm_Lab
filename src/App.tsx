@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Container, Card, Title } from '@mantine/core'
+import { Badge, Card, Container, Group, Paper, Stack, Text, Title } from '@mantine/core'
 import ControlPanel from './components/ControlPanel'
 import GraphCanvas from './features/sim/components/GraphCanvas'
 import RingSnapshotCanvas from './features/sim/components/RingSnapshotCanvas'
@@ -29,6 +29,18 @@ export default function App() {
   const [autoRun, setAutoRun] = useState<boolean>(true)
   const [speed, setSpeed] = useState<number>(300)
   const [algorithm, setAlgorithm] = useState<string>('ricart')
+
+  const algorithmMeta: Record<string, { label: string; tone: string; description: string }> = {
+    ricart: { label: 'Ricart-Agrawala', tone: 'red', description: 'Mutual exclusion with timestamped requests and replies.' },
+    token: { label: 'Token Ring', tone: 'orange', description: 'A token circulates through the logical ring.' },
+    bully: { label: 'Bully Election', tone: 'violet', description: 'The highest live process becomes coordinator.' },
+    ring: { label: 'Ring Election', tone: 'blue', description: 'Election messages travel around a ring topology.' },
+    suzuki: { label: 'Suzuki-Kasami', tone: 'yellow', description: 'Token-based distributed mutual exclusion.' },
+    lamport: { label: 'Horloge de Lamport', tone: 'grape', description: 'Scalar logical clocks order distributed events.' },
+    vector: { label: 'Horloge Vectorielle', tone: 'cyan', description: 'Vector timestamps show causal precedence and concurrency.' },
+    matrix: { label: 'Horloge Matricielle', tone: 'teal', description: 'Matrix clocks check causal delivery before accepting messages.' },
+  }
+  const activeAlgorithm = algorithmMeta[algorithm] ?? algorithmMeta.ricart
 
   function appendLog(s: string) {
     setLogs((l) => [...l, new Date().toLocaleTimeString() + ' ' + s].slice(-500))
@@ -121,6 +133,18 @@ export default function App() {
   function stop() {
     simRef.current?.stop()
     appendLog('Simulation stopped')
+  }
+
+  function startCurrentScenario() {
+    if (algorithm === 'ricart') return requestCS()
+    if (algorithm === 'token') return passToken()
+    if (algorithm === 'bully') return startBullyElection()
+    if (algorithm === 'suzuki') return requestSuzuki()
+    if (algorithm === 'lamport') return loadLamportClockScenario()
+    if (algorithm === 'vector') return loadVectorClockScenario()
+    if (algorithm === 'matrix') return loadMatrixClockScenario()
+    initSim(algorithm)
+    appendLog(`Simulation ${activeAlgorithm.label} started`)
   }
 
   // ── Ricart–Agrawala ────────────────────────────────────────────────────────
@@ -374,13 +398,24 @@ export default function App() {
   return (
     <SimProvider>
       <div className="app">
-        <Container fluid>
-          <Title order={2}>Distributed Algorithms Simulator — TP</Title>
+        <Container fluid className="app-shell">
+          <Paper className="app-header" shadow="sm">
+            <div>
+              <Text className="eyebrow">Distributed systems lab</Text>
+              <Title order={2}>Distributed Algorithms Simulator</Title>
+              <Text size="sm" c="dimmed">{activeAlgorithm.description}</Text>
+            </div>
+            <Group gap="sm">
+              <Badge size="lg" color={activeAlgorithm.tone} variant="light">{activeAlgorithm.label}</Badge>
+              <Badge size="lg" color="gray" variant="outline">{numberOfProcesses} processes</Badge>
+              <Badge size="lg" color={autoRun ? 'green' : 'gray'} variant="dot">{autoRun ? 'Auto run' : 'Manual'}</Badge>
+            </Group>
+          </Paper>
           <div className="content">
-            <div className="left">
-              <Card shadow="sm">
+            <Stack className="left" gap="md">
+              <Card shadow="sm" radius="md" withBorder className="panel-card">
                 <ControlPanel
-                  onStart={stop}          // bouton Stop uniquement
+                  onStart={startCurrentScenario}
                   onStop={stop}
                   onRequestCS={requestCS}
                   onPassToken={passToken}
@@ -406,23 +441,25 @@ export default function App() {
                   setTokenHolder={setTokenHolder}
                 />
               </Card>
-              <Card shadow="sm" style={{ marginTop: 12 }}>
+              <Card shadow="sm" radius="md" withBorder className="panel-card log-card">
                 <LogView logs={logs} />
               </Card>
-            </div>
+            </Stack>
             <div className="right">
-              <Card shadow="sm">
-                <div style={{ marginBottom: 8 }}>
+              <Card shadow="sm" radius="md" withBorder className="workspace-card">
+                <div className="workspace-toolbar">
                   <React.Suspense fallback={null}>
                     <TimelineControls />
                   </React.Suspense>
                 </div>
                 {/* Afficher RingSnapshotCanvas uniquement pour Ring Election */}
-                {algorithm === 'ring' ? (
-                  <RingSnapshotCanvas />
-                ) : (
-                  <GraphCanvas />
-                )}
+                <div className="visual-stage">
+                  {algorithm === 'ring' ? (
+                    <RingSnapshotCanvas />
+                  ) : (
+                    <GraphCanvas />
+                  )}
+                </div>
               </Card>
             </div>
           </div>
