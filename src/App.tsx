@@ -323,6 +323,11 @@ export default function App() {
       window.removeEventListener('sim:narration', handleNarration)
     }
   }, [])
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('sim:set_selected_process', { detail: selectedProcess }))
+  }, [selectedProcess])
+
   async function loadLamportClockScenario() {
     try {
       const { generateLamportClockCinema } = await import('./features/sim/algorithms/lamportClockCinema')
