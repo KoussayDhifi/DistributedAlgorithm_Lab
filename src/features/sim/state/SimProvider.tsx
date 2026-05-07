@@ -28,6 +28,7 @@ type Action =
   | { type: 'SET_INDEX'; index: number }
   | { type: 'SET_SPEED'; speed: number }
   | { type: 'SET_ALGORITHM'; algorithm: string }
+  | { type: 'RESET_STATE' }
 
 function reducer(state: SimState, action: Action): SimState {
   switch (action.type) {
@@ -48,7 +49,9 @@ function reducer(state: SimState, action: Action): SimState {
     case 'SET_SPEED':
       return { ...state, speed: action.speed }
     case 'SET_ALGORITHM':
-      return { ...state, algorithm: action.algorithm }
+      return { ...state, algorithm: action.algorithm, steps: [], index: 0, playing: false }
+    case 'RESET_STATE':
+      return { ...initialState, algorithm: state.algorithm }
     default:
       return state
   }
