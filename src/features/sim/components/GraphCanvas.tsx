@@ -1,6 +1,6 @@
 import React from 'react'
 import { useSim } from '../state/SimProvider'
-import type { MessageStep, AlgorithmStep } from '../model/algorithmCinema'
+import type { MessageStep, AlgorithmStep, CinemaNodeState } from '../model/algorithmCinema'
 
 function colorFor(m: MessageStep) {
   const t = String(m.msgType || '').toUpperCase()
@@ -10,7 +10,43 @@ function colorFor(m: MessageStep) {
   if (t.includes('OK')) return 'green'
   if (t.includes('COORD')) return 'purple'
   if (t.includes('TOKEN')) return 'orange'
+  if (t.includes('VC')) return '#1971c2'
   return '#333'
+}
+
+function deriveNodes(baseNodes: CinemaNodeState[], steps: AlgorithmStep[], index: number) {
+  const nodes = baseNodes.map((node) => ({
+    ...node,
+    badges: { ...(node.badges || {}) },
+  }))
+
+  steps.slice(0, index).forEach((step) => {
+    if (step.type !== 'node') return
+    const nodeIndex = nodes.findIndex((node) => node.id === step.nodeId)
+    if (nodeIndex === -1) return
+    nodes[nodeIndex] = {
+      ...nodes[nodeIndex],
+      ...step.state,
+      badges: { ...(nodes[nodeIndex].badges || {}), ...(step.state.badges || {}) },
+    }
+  })
+
+  return nodes
+}
+
+function latestNarration(steps: AlgorithmStep[], index: number) {
+  for (let i = Math.min(index - 1, steps.length - 1); i >= 0; i -= 1) {
+    const step = steps[i]
+    if (step.type === 'narration') return step.text
+  }
+  return ''
+}
+
+function isMatchingMessage(a: MessageStep, b: MessageStep) {
+  const aKey = a.meta?.messageKey
+  const bKey = b.meta?.messageKey
+  if (aKey || bKey) return aKey === bKey
+  return a.from === b.from && a.to === b.to && String(a.msgType) === String(b.msgType)
 }
 
 function getCurve(p1: { x: number; y: number }, p2: { x: number; y: number }, progress: number, curveOffset: number = 40) {
@@ -54,7 +90,7 @@ function SequenceCanvas() {
   const topMargin = 30
   const bottomMargin = 20
 
-  const nodes = state.processes
+  const nodes = deriveNodes(state.processes, state.steps, state.index)
   const steps = state.steps
   const idx = state.index
   const visibleSteps = steps.slice(0, idx)
@@ -87,7 +123,7 @@ function SequenceCanvas() {
     for (let j = i + 1; j < messages.length; j++) {
       if (used.has(j)) continue
       const mj = messages[j].m
-      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) {
+      if (isMatchingMessage(m, mj)) {
         found = j
         break
       }
@@ -103,26 +139,49 @@ function SequenceCanvas() {
     }
   }
 
-  // group all pairs by sender so outgoing arrows originate from the same tail point
-  type Group = { from: number; baseSendIndex: number; items: typeof pairs[0][] }
-  const groupsMap = new Map<number, typeof pairs[0][]>()
-  for (const p of pairs) {
-    const arr = groupsMap.get(p.send.from) || []
-    arr.push(p)
-    groupsMap.set(p.send.from, arr)
-  }
-  const groups: Group[] = []
-  for (const [from, items] of groupsMap.entries()) {
-    const baseSendIndex = items.reduce((min, it) => Math.min(min, it.sendIndex), Infinity)
-    groups.push({ from, baseSendIndex: baseSendIndex === Infinity ? 0 : baseSendIndex, items })
+  const visibleNodeSteps: Array<{ stepIndex: number; step: Extract<AlgorithmStep, { type: 'node' }> }> = []
+  visibleSteps.forEach((step, stepIndex) => {
+    if (step.type === 'node' && step.state.badges?.event && step.state.badges.event !== 'init') {
+      visibleNodeSteps.push({ stepIndex, step })
+    }
+  })
+
+  const narration = latestNarration(steps, idx)
+
+  function messageStartIndex(sendIndex: number, send: MessageStep) {
+    if (!send.meta?.messageKey) return sendIndex
+
+    for (let i = sendIndex - 1; i >= 0; i -= 1) {
+      const step = steps[i]
+      if (
+        step.type === 'node' &&
+        step.nodeId === send.from &&
+        step.state.badges?.kind === 'send' &&
+        step.state.badges?.event === send.meta.event
+      ) {
+        return i
+      }
+    }
+
+    return sendIndex
   }
 
-  // helper to color by type
-  function colorFor(m: MessageStep) {
-    const t = String(m.msgType || '').toUpperCase()
-    if (t.includes('REQUEST')) return 'crimson'
-    if (t.includes('REPLY')) return 'seagreen'
-    return '#333'
+  function messageEndIndex(deliverIndex: number, send: MessageStep) {
+    if (!send.meta?.messageKey) return deliverIndex
+
+    for (let i = deliverIndex + 1; i < steps.length; i += 1) {
+      const step = steps[i]
+      if (step.type === 'narration') break
+      if (
+        step.type === 'node' &&
+        step.nodeId === send.to &&
+        step.state.badges?.kind === 'receive'
+      ) {
+        return i
+      }
+    }
+
+    return deliverIndex
   }
 
   return (
@@ -150,6 +209,9 @@ function SequenceCanvas() {
           return (
             <g key={n.id}>
               <text x={10} y={y + 5} fontSize={13} fontWeight={600}>{n.label ?? `P${n.id}`}</text>
+              {n.badges?.vector && (
+                <text x={62} y={y + 5} fontSize={11} fill="#555">{String(n.badges.vector)}</text>
+              )}
               <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#e6e6e6" strokeWidth={2} />
               {/* CS indicator */}
               {n.color === 'orange' && (
@@ -160,58 +222,83 @@ function SequenceCanvas() {
         })}
       </g>
 
-      {/* messages for visible steps (paired send -> deliver), grouped by sender so tails share same origin */}
+      {/* messages for visible steps (paired send -> deliver) */}
       <g>
-        {groups.map((g, gi) => {
-          const baseSendIndex = g.baseSendIndex
-          const senderIndex = nodes.findIndex((p) => p.id === g.from)
-          if (senderIndex === -1) return null
-          const x1 = stepX(baseSendIndex)
-          const y1 = processY(senderIndex)
-          return (
-            <g key={`group-${g.from}-${baseSendIndex}`}>
-              {g.items.map((pair, i) => {
-                const { sendIndex, deliverIndex, send } = pair
-                // if the logical send happened after current time, hide
-                if (sendIndex >= idx) return null
-                const toIndex = nodes.findIndex((p) => p.id === send.to)
-                if (toIndex === -1) return null
-                const x2 = stepX(deliverIndex)
-                const y2 = processY(toIndex)
-                const color = colorFor(send)
+        {pairs.map((pair, i) => {
+          const { sendIndex, deliverIndex, send } = pair
+          if (sendIndex >= idx) return null
+          const senderIndex = nodes.findIndex((p) => p.id === send.from)
+          const toIndex = nodes.findIndex((p) => p.id === send.to)
+          if (senderIndex === -1 || toIndex === -1) return null
 
-                // draw straight diagonal lines from single shared origin (x1,y1) to destination (x2,y2)
-                const originX = x1
-                const originY = y1
-                if (deliverIndex <= idx) {
-                  const mx = (originX + x2) / 2
-                  const my = (originY + y2) / 2
-                  return (
-                    <g key={`${send.id}-${pair.deliver.id}`}>
-                      <line x1={originX} y1={originY} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} />
-                      <rect x={mx - 28} y={my - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
-                      <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
-                    </g>
-                  )
-                } else {
-                  const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
-                  const cx2 = originX + (x2 - originX) * progress
-                  const cy2 = originY + (y2 - originY) * progress
-                  const mx2 = (originX + cx2) / 2
-                  const my2 = (originY + cy2) / 2
-                  return (
-                    <g key={`${send.id}-inflight-${i}`}>
-                      <line x1={originX} y1={originY} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} strokeDasharray="4 3" />
-                      <rect x={mx2 - 28} y={my2 - 12} rx={6} width={56} height={20} fill="#fff" stroke={color} />
-                      <text x={mx2} y={my2 + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
-                    </g>
-                  )
-                }
-              })}
+          const startIndex = messageStartIndex(sendIndex, send)
+          const endIndex = messageEndIndex(deliverIndex, send)
+          const originX = stepX(startIndex)
+          const originY = processY(senderIndex)
+          const x2 = stepX(endIndex)
+          const y2 = processY(toIndex)
+          const color = colorFor(send)
+          const labelWidth = Math.max(56, String(send.msgType).length * 8)
+
+          if (deliverIndex <= idx) {
+            const mx = (originX + x2) / 2
+            const my = (originY + y2) / 2
+            return (
+              <g key={`${send.id}-${pair.deliver.id}`}>
+                <line x1={originX} y1={originY} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} />
+                <rect x={mx - labelWidth / 2} y={my - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
+                <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
+                {send.meta?.vector && (
+                  <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>
+                )}
+              </g>
+            )
+          }
+
+          const progress = Math.max(0, Math.min(1, (idx - sendIndex) / Math.max(1, deliverIndex - sendIndex)))
+          const cx2 = originX + (x2 - originX) * progress
+          const cy2 = originY + (y2 - originY) * progress
+          const mx2 = (originX + cx2) / 2
+          const my2 = (originY + cy2) / 2
+          return (
+            <g key={`${send.id}-inflight-${i}`}>
+              <line x1={originX} y1={originY} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} strokeDasharray="4 3" />
+              <rect x={mx2 - labelWidth / 2} y={my2 - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
+              <text x={mx2} y={my2 + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
+              {send.meta?.vector && (
+                <text x={mx2} y={my2 + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>
+              )}
             </g>
           )
         })}
       </g>
+
+      <g>
+        {visibleNodeSteps.map(({ stepIndex, step }) => {
+          const nodeIndex = nodes.findIndex((node) => node.id === step.nodeId)
+          if (nodeIndex === -1) return null
+          const x = stepX(stepIndex)
+          const y = processY(nodeIndex)
+          const kind = String(step.state.badges?.kind || '')
+          const color = kind === 'receive' ? '#2f9e44' : kind === 'send' ? '#1971c2' : '#868e96'
+          const vector = String(step.state.badges?.vector || '')
+          const event = String(step.state.badges?.event || '')
+          return (
+            <g key={step.id}>
+              <circle cx={x} cy={y} r={5} fill={color} stroke="#fff" strokeWidth={2} />
+              <text x={x} y={y - 10} fontSize={10} textAnchor="middle" fill="#222" fontWeight={700}>{event}</text>
+              <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color}>{vector}</text>
+            </g>
+          )
+        })}
+      </g>
+
+      {narration && (
+        <g>
+          <rect x={leftMargin} y={height - 32} rx={6} width={width - leftMargin - rightMargin} height={24} fill="#f8f9fa" stroke="#dee2e6" />
+          <text x={leftMargin + 10} y={height - 15} fontSize={12} fill="#343a40">{narration}</text>
+        </g>
+      )}
     </svg>
   )
 }
@@ -224,7 +311,7 @@ function NetworkCanvas() {
   const cy = height / 2
   const radius = Math.min(width, height) / 2 - 60
 
-  const nodes = state.processes
+  const nodes = deriveNodes(state.processes, state.steps, state.index)
   const steps = state.steps
   const idx = state.index
 
@@ -252,7 +339,7 @@ function NetworkCanvas() {
     for (let j = i + 1; j < messages.length; j++) {
       if (used.has(j)) continue
       const mj = messages[j].m
-      if (mj.from === m.from && mj.to === m.to && String(mj.msgType) === String(m.msgType)) {
+      if (isMatchingMessage(m, mj)) {
         found = j
         break
       }

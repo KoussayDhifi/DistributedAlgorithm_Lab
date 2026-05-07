@@ -75,6 +75,10 @@ export default function App() {
     } catch (e) {
       // ignore
     }
+
+    if (algorithm === 'vector') {
+      loadVectorClockScenario()
+    }
   }
 
   // respond to numberOfProcesses changes by updating processes list and notifying provider
@@ -218,6 +222,22 @@ export default function App() {
     }
   }
 
+  async function loadVectorClockScenario() {
+    try {
+      const { generateVectorClockCinema } = await import('./features/sim/algorithms/vectorClockCinema')
+      const payload = generateVectorClockCinema(processes.map((p) => p.id))
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded random Vector Clock (Mattern) scenario')
+    } catch (e) {
+      appendLog('Failed to load vector clock scenario: ' + String(e))
+    }
+  }
+
+  useEffect(() => {
+    if (algorithm !== 'vector') return
+    loadVectorClockScenario()
+  }, [algorithm, processes])
+
   return (
     <SimProvider>
       <div className="app">
@@ -233,6 +253,7 @@ export default function App() {
                   onPassToken={passToken}
                   onStep={step}
                   onBullyElection={startBullyElection}
+                  onVectorScenario={loadVectorClockScenario}
                   processes={processes.map((p) => p.id)}
                   selectedProcess={selectedProcess}
                   setSelectedProcess={setSelectedProcess}
