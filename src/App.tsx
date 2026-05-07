@@ -29,6 +29,7 @@ export default function App() {
   const [autoRun, setAutoRun] = useState<boolean>(true)
   const [speed, setSpeed] = useState<number>(300)
   const [algorithm, setAlgorithm] = useState<string>('ricart')
+  const [scenarioId, setScenarioId] = useState<string>('scenario1')
 
   function appendLog(s: string) {
     setLogs((l) => [...l, new Date().toLocaleTimeString() + ' ' + s].slice(-500))
@@ -134,8 +135,34 @@ export default function App() {
     const ra = raInstances.current?.[requester]
     if (!ra) return appendLog('RA instance missing')
 
+    // ✅ Générer le cinema EN PREMIER, avant tout envoi
+    try {
+      const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
+      let scenario;
+      if (scenarioId === 'scenario2') {
+         scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario2')).default;
+      } else if (scenarioId === 'scenario3') {
+         scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario3')).default;
+      } else {
+         scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario1')).default;
+      }
+
+      const payload = generateRicartAgrawalaCinema({
+        requester,
+        processes: processes.map((p) => p.id),
+        alsoRequesting: scenario.alsoRequesting,
+      })
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      window.dispatchEvent(new CustomEvent('sim:init_processes', { 
+        detail: processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' })) 
+      }))
+      appendLog('Loaded cinema payload for playback')
+    } catch (e) {
+      appendLog('Failed to load cinema payload: ' + String(e))
+    }
+
     setProcesses((ps) => ps.map((pp) => (pp.id === requester ? { ...pp, state: 'requesting' } : pp)))
-    ra.requestCS(Date.now(), (m: Message) => sim.send(m), peers)
+    ra.requestCS((m: Message) => sim.send(m), peers)
     appendLog(`Process ${requester} sent RA_REQUEST to peers`)
 
     const checkInterval = setInterval(() => {
@@ -152,15 +179,6 @@ export default function App() {
         }
       } catch (e) { clearInterval(checkInterval) }
     }, 150)
-
-    try {
-      const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
-      const payload = generateRicartAgrawalaCinema(requester, processes.map((p) => p.id))
-      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
-      appendLog('Loaded cinema payload for playback')
-    } catch (e) {
-      appendLog('Failed to load cinema payload: ' + String(e))
-    }
   }
 
   function step() {
@@ -404,6 +422,8 @@ export default function App() {
                   setNumberOfProcesses={setNumberOfProcesses}
                   tokenHolder={tokenHolder}
                   setTokenHolder={setTokenHolder}
+                  scenarioId={scenarioId}
+                  setScenarioId={setScenarioId}
                 />
               </Card>
               <Card shadow="sm" style={{ marginTop: 12 }}>

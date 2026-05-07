@@ -204,7 +204,7 @@ export default function SuzukiInfoPanel() {
 
   return (
     <div style={{
-      : '#0d0d0d',
+      background: '#0d0d0d',
       border: `2px solid ${phaseStyle.border}`,
       borderRadius: 12,
       padding: 16,

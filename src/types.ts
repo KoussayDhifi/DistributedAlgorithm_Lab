@@ -6,6 +6,7 @@ export type Message = {
   type: string
   payload?: any
   time?: number
+  clock?: number
 }
 
 export type Process = {

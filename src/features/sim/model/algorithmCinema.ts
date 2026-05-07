@@ -6,6 +6,7 @@ export type CinemaNodeState = {
   color?: string
   badges?: Record<string, any>
   processId?: number
+  clock?: number
 }
 
 export type MessageStep = {
@@ -15,6 +16,7 @@ export type MessageStep = {
   to: NodeId
   msgType: string
   meta?: any
+  clock?: number
 }
 
 export type NodeStateStep = {
@@ -30,7 +32,14 @@ export type NarrationStep = {
   text: string
 }
 
-export type AlgorithmStep = MessageStep | NodeStateStep | NarrationStep
+export type CriticalSectionStep = {
+  type: 'cs'
+  id: string
+  nodeId: NodeId
+  action: 'enter' | 'leave'
+}
+
+export type AlgorithmStep = MessageStep | NodeStateStep | NarrationStep | CriticalSectionStep
 
 export type AlgorithmCinemaPayload = {
   metadata?: {
