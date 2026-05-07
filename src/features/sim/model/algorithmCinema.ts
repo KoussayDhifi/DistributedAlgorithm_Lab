@@ -5,6 +5,7 @@ export type CinemaNodeState = {
   label?: string
   color?: string
   badges?: Record<string, any>
+  processId?: number
 }
 
 export type MessageStep = {

@@ -1,11 +1,11 @@
 # Distributed Algorithms Simulator (TP)
 
-This project is an interactive pedagogic simulator for distributed algorithms (mutual exclusion and election). Frontend is built with React + TypeScript, Mantine UI, and react-konva for visuals.
+This project is an interactive pedagogic simulator for distributed algorithms (mutual exclusion and election). Frontend is built with React + TypeScript, Mantine UI, and D3 for visuals.
 
-Features implemented (starter):
+Features implemented:
 - Visualizer for processes
 - Event log
-- Modules for Ricart–Agrawala, Token Ring, Bully, Ring Election (simulation scaffolding)
+- Modules for Ricart–Agrawala, Token Ring, Bully, Ring Election
 
 Run locally:
 

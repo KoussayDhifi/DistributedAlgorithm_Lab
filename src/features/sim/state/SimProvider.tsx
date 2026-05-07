@@ -28,6 +28,7 @@ type Action =
   | { type: 'SET_INDEX'; index: number }
   | { type: 'SET_SPEED'; speed: number }
   | { type: 'SET_ALGORITHM'; algorithm: string }
+  | { type: 'RESET' }
   | { type: 'RESET_STATE' }
 
 function reducer(state: SimState, action: Action): SimState {
@@ -49,7 +50,9 @@ function reducer(state: SimState, action: Action): SimState {
     case 'SET_SPEED':
       return { ...state, speed: action.speed }
     case 'SET_ALGORITHM':
-      return { ...state, algorithm: action.algorithm, steps: [], index: 0, playing: false }
+      return { ...state, algorithm: action.algorithm }
+    case 'RESET':
+      return { ...initialState, speed: state.speed, algorithm: state.algorithm }
     case 'RESET_STATE':
       return { ...initialState, algorithm: state.algorithm }
     default:
@@ -82,10 +85,15 @@ export function SimProvider({ children }: { children: ReactNode }) {
       if (typeof algo === 'string') dispatch({ type: 'SET_ALGORITHM', algorithm: algo })
     }
     window.addEventListener('sim:set_algorithm', handlerSetAlgo)
+    function handlerReset() {
+      dispatch({ type: 'RESET' })
+    }
+    window.addEventListener('sim:reset', handlerReset)
     return () => {
       window.removeEventListener('sim:init_processes', handler)
       window.removeEventListener('sim:load_cinema', handlerLoad)
       window.removeEventListener('sim:set_algorithm', handlerSetAlgo)
+      window.removeEventListener('sim:reset', handlerReset)
     }
   }, [])
   
