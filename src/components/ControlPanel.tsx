@@ -9,6 +9,7 @@ type Props = {
   onStep: () => void
   onBullyElection: () => void
   onVectorScenario: () => void
+  onMatrixScenario: () => void
   processes: number[]
   selectedProcess: number
   setSelectedProcess: (id: number) => void
@@ -22,7 +23,7 @@ type Props = {
   setNumberOfProcesses: (n: number) => void
 }
 
-export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, onBullyElection, onVectorScenario, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
+export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken, onStep, onBullyElection, onVectorScenario, onMatrixScenario, processes, selectedProcess, setSelectedProcess, autoRun, setAutoRun, speed, setSpeed, algorithm, setAlgorithm, numberOfProcesses, setNumberOfProcesses }: Props) {
 
   return (
     <Stack>
@@ -41,6 +42,7 @@ export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken
           { value: 'bully', label: 'Bully Election' },
           { value: 'ring', label: 'Ring Election' },
           { value: 'vector', label: 'Horloge Vectorielle (Mattern)' },
+          { value: 'matrix', label: 'Horloge Matricielle' },
         ]}
       />
       <NumberInput
@@ -67,6 +69,7 @@ export default function ControlPanel({ onStart, onStop, onRequestCS, onPassToken
       {algorithm === 'bully' && <Button onClick={onBullyElection}>Start Bully Election</Button>}
       {algorithm === 'ring' && <Button onClick={onStep}>Start Ring Election</Button>}
       {algorithm === 'vector' && <Button onClick={onVectorScenario}>New Random Scenario</Button>}
+      {algorithm === 'matrix' && <Button onClick={onMatrixScenario}>New Causal Delivery Scenario</Button>}
 
       <Group>
         <Button onClick={onStep}>Step</Button>

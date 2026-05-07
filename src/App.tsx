@@ -78,6 +78,8 @@ export default function App() {
 
     if (algorithm === 'vector') {
       loadVectorClockScenario()
+    } else if (algorithm === 'matrix') {
+      loadMatrixClockScenario()
     }
   }
 
@@ -233,9 +235,25 @@ export default function App() {
     }
   }
 
+  async function loadMatrixClockScenario() {
+    try {
+      const { generateMatrixClockCinema } = await import('./features/sim/algorithms/matrixClockCinema')
+      const payload = generateMatrixClockCinema(processes.map((p) => p.id))
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded Matrix Clock causal-delivery scenario')
+    } catch (e) {
+      appendLog('Failed to load matrix clock scenario: ' + String(e))
+    }
+  }
+
   useEffect(() => {
     if (algorithm !== 'vector') return
     loadVectorClockScenario()
+  }, [algorithm, processes])
+
+  useEffect(() => {
+    if (algorithm !== 'matrix') return
+    loadMatrixClockScenario()
   }, [algorithm, processes])
 
   return (
@@ -254,6 +272,7 @@ export default function App() {
                   onStep={step}
                   onBullyElection={startBullyElection}
                   onVectorScenario={loadVectorClockScenario}
+                  onMatrixScenario={loadMatrixClockScenario}
                   processes={processes.map((p) => p.id)}
                   selectedProcess={selectedProcess}
                   setSelectedProcess={setSelectedProcess}

@@ -11,6 +11,7 @@ function colorFor(m: MessageStep) {
   if (t.includes('COORD')) return 'purple'
   if (t.includes('TOKEN')) return 'orange'
   if (t.includes('VC')) return '#1971c2'
+  if (t.includes('HM')) return m.meta?.rejected ? '#e03131' : '#6741d9'
   return '#333'
 }
 
@@ -45,7 +46,11 @@ function latestNarration(steps: AlgorithmStep[], index: number) {
 function isMatchingMessage(a: MessageStep, b: MessageStep) {
   const aKey = a.meta?.messageKey
   const bKey = b.meta?.messageKey
-  if (aKey || bKey) return aKey === bKey
+    if (aKey || bKey) {
+      const aRejected = Boolean(a.meta?.rejected)
+      const bRejected = Boolean(b.meta?.rejected)
+      return aKey === bKey && aRejected === bRejected
+    }
   return a.from === b.from && a.to === b.to && String(a.msgType) === String(b.msgType)
 }
 
@@ -169,6 +174,23 @@ function SequenceCanvas() {
   function messageEndIndex(deliverIndex: number, send: MessageStep) {
     if (!send.meta?.messageKey) return deliverIndex
 
+    if (send.meta?.rejected) {
+      for (let i = deliverIndex + 1; i < steps.length; i += 1) {
+        const step = steps[i]
+        if (step.type === 'narration') break
+        if (
+          step.type === 'node' &&
+          step.nodeId === send.to &&
+          step.state.badges?.kind === 'reject' &&
+          step.state.badges?.rejected
+        ) {
+          return i
+        }
+      }
+
+      return deliverIndex
+    }
+
     for (let i = deliverIndex + 1; i < steps.length; i += 1) {
       const step = steps[i]
       if (step.type === 'narration') break
@@ -190,6 +212,9 @@ function SequenceCanvas() {
         <marker id="arrow" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M0,-5L10,0L0,5" fill="#000" />
         </marker>
+        <marker id="arrow-red" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,-5L10,0L0,5" fill="#e03131" />
+        </marker>
       </defs>
 
       {/* time axis */}
@@ -206,11 +231,28 @@ function SequenceCanvas() {
       <g>
         {nodes.map((n, i) => {
           const y = processY(i)
+          const matrixRows = Array.isArray(n.badges?.matrixRows) ? n.badges.matrixRows as string[] : []
           return (
             <g key={n.id}>
               <text x={10} y={y + 5} fontSize={13} fontWeight={600}>{n.label ?? `P${n.id}`}</text>
               {n.badges?.vector && (
                 <text x={62} y={y + 5} fontSize={11} fill="#555">{String(n.badges.vector)}</text>
+              )}
+              {matrixRows.length > 0 && (
+                <g>
+                  {matrixRows.map((row, rowIndex) => (
+                    <text
+                      key={rowIndex}
+                      x={62}
+                      y={y - 12 + rowIndex * 11}
+                      fontSize={10}
+                      fontFamily="monospace"
+                      fill="#555"
+                    >
+                      {row}
+                    </text>
+                  ))}
+                </g>
               )}
               <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#e6e6e6" strokeWidth={2} />
               {/* CS indicator */}
@@ -239,18 +281,31 @@ function SequenceCanvas() {
           const y2 = processY(toIndex)
           const color = colorFor(send)
           const labelWidth = Math.max(56, String(send.msgType).length * 8)
+          const matrixRows = Array.isArray(send.meta?.matrixRows) ? send.meta.matrixRows as string[] : []
 
           if (deliverIndex <= idx) {
             const mx = (originX + x2) / 2
             const my = (originY + y2) / 2
             return (
               <g key={`${send.id}-${pair.deliver.id}`}>
-                <line x1={originX} y1={originY} x2={x2} y2={y2} stroke={color} strokeWidth={2} markerEnd={`url(#arrow)`} />
+                <line
+                  x1={originX}
+                  y1={originY}
+                  x2={x2}
+                  y2={y2}
+                  stroke={color}
+                  strokeWidth={send.meta?.rejected ? 3 : 2}
+                  strokeDasharray={send.meta?.rejected ? '7 4' : undefined}
+                  markerEnd={send.meta?.rejected ? 'url(#arrow-red)' : 'url(#arrow)'}
+                />
                 <rect x={mx - labelWidth / 2} y={my - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
                 <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
                 {send.meta?.vector && (
                   <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>
                 )}
+                {matrixRows.map((row, rowIndex) => (
+                  <text key={rowIndex} x={mx} y={my + 22 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={color}>{row}</text>
+                ))}
               </g>
             )
           }
@@ -268,6 +323,9 @@ function SequenceCanvas() {
               {send.meta?.vector && (
                 <text x={mx2} y={my2 + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>
               )}
+              {matrixRows.map((row, rowIndex) => (
+                <text key={rowIndex} x={mx2} y={my2 + 22 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={color}>{row}</text>
+              ))}
             </g>
           )
         })}
@@ -282,12 +340,23 @@ function SequenceCanvas() {
           const kind = String(step.state.badges?.kind || '')
           const color = kind === 'receive' ? '#2f9e44' : kind === 'send' ? '#1971c2' : '#868e96'
           const vector = String(step.state.badges?.vector || '')
+          const matrixRows = Array.isArray(step.state.badges?.matrixRows) ? step.state.badges.matrixRows as string[] : []
           const event = String(step.state.badges?.event || '')
+          const rejected = Boolean(step.state.badges?.rejected)
           return (
             <g key={step.id}>
-              <circle cx={x} cy={y} r={5} fill={color} stroke="#fff" strokeWidth={2} />
+              <circle cx={x} cy={y} r={5} fill={rejected ? '#e03131' : color} stroke="#fff" strokeWidth={2} />
+              {rejected && (
+                <g stroke="#e03131" strokeWidth={3} strokeLinecap="round">
+                  <line x1={x - 9} y1={y - 9} x2={x + 9} y2={y + 9} />
+                  <line x1={x + 9} y1={y - 9} x2={x - 9} y2={y + 9} />
+                </g>
+              )}
               <text x={x} y={y - 10} fontSize={10} textAnchor="middle" fill="#222" fontWeight={700}>{event}</text>
               <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color}>{vector}</text>
+              {matrixRows.map((row, rowIndex) => (
+                <text key={rowIndex} x={x} y={y + 20 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={rejected ? '#e03131' : color}>{row}</text>
+              ))}
             </g>
           )
         })}
