@@ -92,6 +92,8 @@ export default function App() {
       loadVectorClockScenario()
     } else if (algorithm === 'matrix') {
       loadMatrixClockScenario()
+    } else if (algorithm === 'lamport') {
+      loadLamportClockScenario()
     }
 
     if (autoRun) sim.start(speed)
@@ -262,6 +264,9 @@ export default function App() {
       window.dispatchEvent(new CustomEvent('sim:set_algorithm', { detail: algorithm }))
       // Réinitialiser l'état quand on change d'algorithme
       window.dispatchEvent(new CustomEvent('sim:reset'))
+      // Il faut réinitialiser les processus pour le SimProvider après un reset
+      const payload = processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
+      window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
     } catch (e) {
       // ignore
     }
@@ -318,6 +323,17 @@ export default function App() {
       window.removeEventListener('sim:narration', handleNarration)
     }
   }, [])
+  async function loadLamportClockScenario() {
+    try {
+      const { generateLamportClockCinema } = await import('./features/sim/algorithms/lamportClockCinema')
+      const payload = generateLamportClockCinema(processes.map((p) => p.id))
+      window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
+      appendLog('Loaded random Lamport Clock scenario')
+    } catch (e) {
+      appendLog('Failed to load Lamport clock scenario: ' + String(e))
+    }
+  }
+
   async function loadVectorClockScenario() {
     try {
       const { generateVectorClockCinema } = await import('./features/sim/algorithms/vectorClockCinema')
@@ -339,6 +355,11 @@ export default function App() {
       appendLog('Failed to load matrix clock scenario: ' + String(e))
     }
   }
+
+  useEffect(() => {
+    if (algorithm !== 'lamport') return
+    loadLamportClockScenario()
+  }, [algorithm, processes])
 
   useEffect(() => {
     if (algorithm !== 'vector') return
@@ -367,6 +388,7 @@ export default function App() {
                   onRunRingElection={runRingElection}
                   onBullyElection={startBullyElection}
                   onSuzukiRequest={requestSuzuki}
+                  onLamportScenario={loadLamportClockScenario}
                   onVectorScenario={loadVectorClockScenario}
                   onMatrixScenario={loadMatrixClockScenario}
                   processes={processes.map((p) => p.id)}

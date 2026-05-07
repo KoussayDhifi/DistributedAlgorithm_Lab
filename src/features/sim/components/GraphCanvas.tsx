@@ -938,6 +938,7 @@ function SequenceCanvas() {
                 {n.badges?.token === '??' && <tspan dx={4}>??</tspan>}
               </text>
               {n.badges?.vector && <text x={62} y={y + 5} fontSize={11} fill="#555">{String(n.badges.vector)}</text>}
+              {n.badges?.H !== undefined && <text x={62} y={y + 5} fontSize={11} fill="#0ea5e9" fontWeight="bold">H={String(n.badges.H)}</text>}
               {matrixRows.length > 0 && (
                 <g>
                   {matrixRows.map((row, rowIndex) => (
@@ -992,6 +993,7 @@ function SequenceCanvas() {
                 <rect x={mx - labelWidth / 2} y={my - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
                 <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
                 {send.meta?.vector && <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>}
+                {send.meta?.H !== undefined && <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color} fontWeight="bold">H={String(send.meta.H)}</text>}
                 {matrixRows.map((row, rowIndex) => (
                   <text key={rowIndex} x={mx} y={my + 22 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={color}>{row}</text>
                 ))}
@@ -1010,6 +1012,7 @@ function SequenceCanvas() {
               <rect x={mx2 - labelWidth / 2} y={my2 - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
               <text x={mx2} y={my2 + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
               {send.meta?.vector && <text x={mx2} y={my2 + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>}
+              {send.meta?.H !== undefined && <text x={mx2} y={my2 + 21} fontSize={10} textAnchor="middle" fill={color} fontWeight="bold">H={String(send.meta.H)}</text>}
               {matrixRows.map((row, rowIndex) => (
                 <text key={rowIndex} x={mx2} y={my2 + 22 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={color}>{row}</text>
               ))}
@@ -1027,6 +1030,7 @@ function SequenceCanvas() {
           const kind = String(step.state.badges?.kind || '')
           const color = kind === 'receive' ? '#2f9e44' : kind === 'send' ? '#1971c2' : '#868e96'
           const vector = String(step.state.badges?.vector || '')
+          const H = step.state.badges?.H !== undefined ? `H=${step.state.badges.H}` : ''
           const matrixRows = Array.isArray(step.state.badges?.matrixRows) ? step.state.badges.matrixRows as string[] : []
           const event = String(step.state.badges?.event || '')
           const rejected = Boolean(step.state.badges?.rejected)
@@ -1040,7 +1044,7 @@ function SequenceCanvas() {
                 </g>
               )}
               <text x={x} y={y - 10} fontSize={10} textAnchor="middle" fill="#222" fontWeight={700}>{event}</text>
-              <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color}>{vector}</text>
+              {(vector || H) && <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color} fontWeight={H ? 'bold' : 'normal'}>{vector || H}</text>}
               {matrixRows.map((row, rowIndex) => (
                 <text key={rowIndex} x={x} y={y + 20 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={rejected ? '#e03131' : color}>{row}</text>
               ))}
