@@ -9,11 +9,22 @@ import type { AlgorithmStep, NodeStateStep, MessageStep } from '../model/algorit
 export default function RingSnapshotCanvas() {
   const { state } = useSim()
   const [zoomedSnapshot, setZoomedSnapshot] = useState<SnapshotData | null>(null)
+  const scrollRef = React.useRef<HTMLDivElement>(null)
   
   const snapshots = useMemo(() => {
     const result = buildSnapshots(state.processes, state.steps, state.index)
     return result
   }, [state.processes, state.steps, state.index])
+
+  // Auto-scroll to bottom as new snapshots appear
+  React.useEffect(() => {
+    if (scrollRef.current && state.playing) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      })
+    }
+  }, [snapshots.length, state.playing])
   
   const n = state.processes.length || 5
   const snapshotSize = Math.max(180, 120 + n * 22)
@@ -51,7 +62,9 @@ export default function RingSnapshotCanvas() {
         )}
       </div>
       
-      <div style={{
+      <div 
+        ref={scrollRef}
+        style={{
         overflowX: 'hidden',
         overflowY: 'auto',
         padding: '20px',

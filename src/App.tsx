@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { ActionIcon, Badge, Box, Button, Card, Container, Group, Modal, Paper, Stack, Text, Title, Tooltip } from '@mantine/core'
+import { ActionIcon, Badge, Button, Card, Container, Group, Modal, Paper, Text, Title, Tooltip } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from '@tabler/icons-react'
 import ControlPanel from './components/ControlPanel'
@@ -55,7 +55,7 @@ export default function App() {
   function initSim(algo: string): Simulator {
     // Arrêter et détruire l'ancien sim
     simRef.current?.stop()
-    raInstances.current    = null
+    raInstances.current = null
     bullyInstances.current = null
     tokenInstances.current = null
 
@@ -130,7 +130,7 @@ export default function App() {
     try {
       const payload = newProcs.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
       window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: payload }))
-    } catch (e) {}
+    } catch (e) { }
     setSelectedProcess((cur) => Math.max(1, Math.min(cur, numberOfProcesses)))
     setTokenHolder((cur) => Math.max(1, Math.min(cur, numberOfProcesses)))
   }, [numberOfProcesses])
@@ -141,6 +141,13 @@ export default function App() {
   }
 
   function startCurrentScenario() {
+    // Scroll down slightly to focus on simulation
+    setTimeout(() => {
+      const target = document.querySelector('.mantine-Modal-body .visual-stage') ||
+        document.querySelector('.visual-stage');
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+
     if (algorithm === 'ricart') return requestCS()
     if (algorithm === 'token') return passToken()
     if (algorithm === 'bully') return startBullyElection()
@@ -169,11 +176,11 @@ export default function App() {
       const { generateRicartAgrawalaCinema } = await import('./features/sim/algorithms/ricartAgrawalaCinema')
       let scenario;
       if (scenarioId === 'scenario2') {
-         scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario2')).default;
+        scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario2')).default;
       } else if (scenarioId === 'scenario3') {
-         scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario3')).default;
+        scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario3')).default;
       } else {
-         scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario1')).default;
+        scenario = (await import('./features/sim/scenarios/Ricart_agrawala/ricartAgrawala_scenario1')).default;
       }
 
       const payload = generateRicartAgrawalaCinema({
@@ -182,8 +189,8 @@ export default function App() {
         alsoRequesting: scenario.alsoRequesting,
       })
       window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
-      window.dispatchEvent(new CustomEvent('sim:init_processes', { 
-        detail: processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' })) 
+      window.dispatchEvent(new CustomEvent('sim:init_processes', {
+        detail: processes.map((p) => ({ id: p.id, label: `P${p.id}`, color: 'skyblue' }))
       }))
       appendLog('Loaded cinema payload for playback')
     } catch (e) {
@@ -274,7 +281,7 @@ export default function App() {
     // Suzuki n'a pas de sim temps-réel : juste reset + cinema
     simRef.current?.stop()
     simRef.current = null
-    raInstances.current    = null
+    raInstances.current = null
     bullyInstances.current = null
     tokenInstances.current = null
 
@@ -322,37 +329,37 @@ export default function App() {
       // ignore
     }
   }, [algorithm])
-  
+
   async function runRingElection(variant: RingVariant, initiators: number[], customIds: number[]) {
     appendLog(`Lancement Ring Election — Variante: ${variant === 'leLann' ? 'Le Lann' : 'Chang-Roberts'}`)
     appendLog(`Initiateurs: ${initiators.map(i => `P${i}`).join(', ')}`)
-    
+
     try {
       const { generateRingElectionCinema } = await import('./features/sim/algorithms/ringElectionCinema')
-      
+
       const ring = processes.map((p, i) => ({
         id: p.id,
         processId: customIds[i] || (i + 1)
       }))
-      
+
       appendLog(`Anneau: ${ring.map(r => `P${r.id}(id=${r.processId})`).join(' → ')}`)
-      
+
       const cinemaProcesses = ring.map(r => ({
         id: r.id,
         label: `P${r.id}`,
         color: 'white',
         processId: r.processId
       }))
-      
+
       window.dispatchEvent(new CustomEvent('sim:init_processes', { detail: cinemaProcesses }))
-      
+
       const payload = generateRingElectionCinema(variant, ring, initiators)
-      
+
       window.dispatchEvent(new CustomEvent('sim:load_cinema', { detail: payload }))
       window.dispatchEvent(new CustomEvent('sim:set_algorithm', { detail: 'ring' }))
-      
+
       appendLog('✓ Scénario chargé')
-      
+
       // Écouter les changements d'index pour afficher les narrations
       window.dispatchEvent(new CustomEvent('sim:enable_narration_logs', { detail: true }))
     } catch (e) {
@@ -361,7 +368,7 @@ export default function App() {
     }
     openModal()
   }
-  
+
   // Écouter les narrations de la simulation
   useEffect(() => {
     function handleNarration(e: any) {
@@ -443,8 +450,8 @@ export default function App() {
               <Badge size="lg" color="gray" variant="outline">{numberOfProcesses} processes</Badge>
               <Badge size="lg" color={autoRun ? 'green' : 'gray'} variant="dot">{autoRun ? 'Auto run' : 'Manual'}</Badge>
               <Tooltip label={sidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}>
-                <ActionIcon 
-                  variant="subtle" 
+                <ActionIcon
+                  variant="subtle"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   size="lg"
                   className="sidebar-toggle"
@@ -492,10 +499,10 @@ export default function App() {
             </aside>
 
             <main className="main-content">
-              <Modal 
-                opened={modalOpened} 
-                onClose={closeModal} 
-                size="95%" 
+              <Modal
+                opened={modalOpened}
+                onClose={closeModal}
+                size="95%"
                 title={<Title order={3}>{activeAlgorithm.label} Animation</Title>}
                 overlayProps={{
                   backgroundOpacity: 0.55,
