@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useSim } from '../state/SimProvider'
 import type { AlgorithmStep, NodeStateStep, MessageStep } from '../model/algorithmCinema'
 
@@ -8,14 +8,22 @@ import type { AlgorithmStep, NodeStateStep, MessageStep } from '../model/algorit
  */
 export default function RingSnapshotCanvas() {
   const { state } = useSim()
+  const [zoomedSnapshot, setZoomedSnapshot] = useState<SnapshotData | null>(null)
   
   const snapshots = useMemo(() => {
     const result = buildSnapshots(state.processes, state.steps, state.index)
     return result
   }, [state.processes, state.steps, state.index])
   
-  const snapshotSize = 240
+  const n = state.processes.length || 5
+  const snapshotSize = Math.max(180, 120 + n * 22)
   const gap = 28
+  
+  // Grille adaptative selon la taille des snapshots
+  let cols = 4
+  if (snapshotSize > 280) cols = 1
+  else if (snapshotSize > 220) cols = 2
+  else if (snapshotSize > 180) cols = 3
   
   return (
     <div style={{
@@ -47,14 +55,20 @@ export default function RingSnapshotCanvas() {
         overflowX: 'hidden',
         overflowY: 'auto',
         padding: '20px',
+        paddingBottom: '60px',
         background: '#fafafa',
-        maxHeight: '700px'
+        maxHeight: 'calc(100vh - 200px)',
+        height: '100%',
+        boxSizing: 'border-box'
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 240px)',
+          gridTemplateColumns: `repeat(${cols}, minmax(${snapshotSize + 40}px, 1fr))`,
           gap: gap,
-          justifyContent: 'center'
+          justifyContent: 'center',
+          paddingBottom: '40px',
+          width: '100%',
+          boxSizing: 'border-box'
         }}>
           {snapshots.map((snap, idx) => (
             <div 
@@ -63,8 +77,14 @@ export default function RingSnapshotCanvas() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                width: snapshotSize
+                width: '100%',
+                maxWidth: snapshotSize + 40,
+                margin: '0 auto',
+                cursor: 'zoom-in',
+                minHeight: 'fit-content',
+                overflow: 'visible'
               }}
+              onClick={() => setZoomedSnapshot(snap)}
             >
               <div style={{
                 fontSize: 12,
@@ -116,6 +136,74 @@ export default function RingSnapshotCanvas() {
           ))}
         </div>
       </div>
+      
+      {/* Overlay zoom */}
+      {zoomedSnapshot && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            cursor: 'zoom-out'
+          }}
+          onClick={() => setZoomedSnapshot(null)}
+        >
+          <div 
+            style={{
+              width: 'min(90vw, 90vh)',
+              height: 'min(90vw, 90vh)',
+              background: 'white',
+              borderRadius: 12,
+              padding: 16,
+              position: 'relative',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setZoomedSnapshot(null)}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: 32,
+                height: 32,
+                fontSize: 18,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                zIndex: 10
+              }}
+            >
+              ✕
+            </button>
+            <div style={{
+              fontSize: 16,
+              fontWeight: 700,
+              marginBottom: 12,
+              textAlign: 'center',
+              color: '#333'
+            }}>
+              {zoomedSnapshot.label}
+            </div>
+            <RingSnapshot
+              processes={zoomedSnapshot.processes}
+              messages={zoomedSnapshot.messages}
+              size={Math.min(window.innerWidth * 0.88, window.innerHeight * 0.88) - 60}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -180,12 +268,11 @@ function buildSnapshots(
   let messagesInTransit: Array<{ from: number; to: number; value: string; deleted?: boolean }> = []
   
   let snapshotCount = 0
-  const maxSnapshots = 30 // limite pour éviter trop de snapshots
   
   // Parcourir les steps visibles
   const visibleSteps = steps.slice(0, currentIndex)
   
-  for (let i = 0; i < visibleSteps.length && snapshotCount < maxSnapshots; i++) {
+  for (let i = 0; i < visibleSteps.length; i++) {
     const step = visibleSteps[i]
     
     if (step.type === 'node') {
@@ -256,18 +343,22 @@ function RingSnapshot({
   const n = processes.length
   const cx = size / 2
   const cy = size / 2
-  const radius = size / 5
-  const nodeRadius = 18
-  const badgeWidth = 52
-  const badgeHeight = 22
-  const badgeDistance = nodeRadius + 18
+  const ringRadius = size * 0.34
+  const nodeRadius = Math.max(12, Math.min(22, 200 / n))
+  const fontSize = Math.max(8, Math.min(13, 180 / n))
+  const messageBubbleRadius = Math.max(14, nodeRadius * 0.75)
+  const messageFontSize = Math.max(7, nodeRadius * 0.55)
   
   const positions = processes.map((p, i) => {
     const angle = (i / n) * Math.PI * 2 - Math.PI / 2
-    const x = cx + Math.cos(angle) * radius
-    const y = cy + Math.sin(angle) * radius
-    const badgeX = cx + Math.cos(angle) * (radius + badgeDistance + badgeWidth / 2)
-    const badgeY = cy + Math.sin(angle) * (radius + badgeDistance + badgeHeight / 2)
+    const x = cx + Math.cos(angle) * ringRadius
+    const y = cy + Math.sin(angle) * ringRadius
+    
+    // Badge positionné à l'extérieur avec offset suffisant
+    const badgeOffset = ringRadius + nodeRadius + 28
+    const badgeX = cx + Math.cos(angle) * badgeOffset
+    const badgeY = cy + Math.sin(angle) * badgeOffset
+    
     return {
       ...p,
       x,
@@ -298,8 +389,36 @@ function RingSnapshot({
     }
   }
   
+  // Fonction pour formater le badge (multi-lignes si nécessaire)
+  function formatBadge(badge: string): string[] {
+    if (!badge) return []
+    
+    // Si c'est une liste [a,b,c,d,e,f]
+    if (badge.startsWith('[') && badge.endsWith(']')) {
+      const content = badge.slice(1, -1)
+      const items = content.split(',')
+      
+      if (items.length <= 3) return [badge]
+      
+      // Diviser en lignes de 3 max
+      const lines: string[] = []
+      for (let i = 0; i < items.length; i += 3) {
+        const chunk = items.slice(i, i + 3).join(',')
+        lines.push(`[${chunk}]`)
+      }
+      return lines.slice(0, 3) // Max 3 lignes
+    }
+    
+    return [badge]
+  }
+  
   return (
-    <svg width={size} height={size} style={{ display: 'block' }}>
+    <svg 
+      width={size} 
+      height={size} 
+      style={{ display: 'block', overflow: 'visible' }}
+      viewBox={`${-size * 0.1} ${-size * 0.1} ${size * 1.2} ${size * 1.2}`}
+    >
       {/* Arcs entre processus (sens horaire) */}
       <g>
         {positions.map((p, i) => {
@@ -312,14 +431,14 @@ function RingSnapshot({
               x2={next.x}
               y2={next.y}
               stroke="#ccc"
-              strokeWidth={1}
+              strokeWidth={1.5}
               markerEnd="url(#arrow-gray)"
             />
           )
         })}
       </g>
       
-      {/* Définition de la flèche */}
+      {/* Définition des flèches */}
       <defs>
         <marker
           id="arrow-gray"
@@ -332,17 +451,6 @@ function RingSnapshot({
         >
           <path d="M0,-5L10,0L0,5" fill="#999" />
         </marker>
-        <marker
-          id="arrow-blue"
-          viewBox="0 -5 10 10"
-          refX="8"
-          refY="0"
-          markerWidth="4"
-          markerHeight="4"
-          orient="auto"
-        >
-          <path d="M0,-5L10,0L0,5" fill="#2196F3" />
-        </marker>
       </defs>
       
       {/* Messages en transit */}
@@ -352,26 +460,35 @@ function RingSnapshot({
           const toPos = positions.find(p => p.id === msg.to)
           if (!fromPos || !toPos) return null
           
-          // Position à mi-chemin
-          const mx = (fromPos.x + toPos.x) / 2
-          const my = (fromPos.y + toPos.y) / 2
+          // Position à 40% de l'arc (pas au milieu exact)
+          const t = 0.4
+          const mx = fromPos.x * (1 - t) + toPos.x * t
+          const my = fromPos.y * (1 - t) + toPos.y * t
           
           return (
             <g key={`msg-${idx}`}>
-              {/* Bulle de message */}
+              {/* Bulle de message avec contour blanc épais */}
               <circle
                 cx={mx}
                 cy={my}
-                r={12}
+                r={messageBubbleRadius}
                 fill={msg.deleted ? '#ffcccc' : '#2196F3'}
-                stroke={msg.deleted ? '#f44336' : '#1976D2'}
+                stroke="#fff"
                 strokeWidth={2}
+              />
+              <circle
+                cx={mx}
+                cy={my}
+                r={messageBubbleRadius}
+                fill="none"
+                stroke={msg.deleted ? '#f44336' : '#1976D2'}
+                strokeWidth={1.5}
               />
               <text
                 x={mx}
-                y={my + 4}
-                fontSize={9}
-                fontWeight={600}
+                y={my + messageFontSize * 0.35}
+                fontSize={messageFontSize}
+                fontWeight={700}
                 textAnchor="middle"
                 fill="#fff"
               >
@@ -380,8 +497,8 @@ function RingSnapshot({
               {msg.deleted && (
                 <text
                   x={mx}
-                  y={my - 14}
-                  fontSize={14}
+                  y={my - messageBubbleRadius - 4}
+                  fontSize={messageBubbleRadius * 1.2}
                   textAnchor="middle"
                   fill="#f44336"
                 >
@@ -395,68 +512,81 @@ function RingSnapshot({
       
       {/* Processus (cercles) */}
       <g>
-        {positions.map(p => (
-          <g key={`proc-${p.id}`}>
-            {/* Cercle du processus */}
-            <circle
-              cx={p.x}
-              cy={p.y}
-              r={nodeRadius}
-              fill={getFillColor(p.color)}
-              stroke={getStrokeColor(p.color)}
-              strokeWidth={2}
-            />
-            {/* ID du processus */}
-            <text
-              x={p.x}
-              y={p.y + 5}
-              fontSize={12}
-              fontWeight={600}
-              textAnchor="middle"
-              fill={p.color === 'white' ? '#000' : '#fff'}
-            >
-              {p.processId != null ? p.processId : `?${p.id}`}
-            </text>
-            
-            {/* Badge état interne - positionné radialement */}
-            <g>
-              <rect
-                x={p.badgeX - badgeWidth / 2}
-                y={p.badgeY - badgeHeight / 2}
-                width={badgeWidth}
-                height={badgeHeight}
-                fill="#fff"
-                stroke="#666"
+        {positions.map(p => {
+          const badgeLines = formatBadge(p.badge)
+          const badgeWidth = Math.max(40, Math.min(120, p.badge.length * 7))
+          const badgeHeight = Math.max(22, badgeLines.length * 14 + 8)
+          
+          return (
+            <g key={`proc-${p.id}`}>
+              {/* Cercle du processus */}
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={nodeRadius}
+                fill={getFillColor(p.color)}
+                stroke={getStrokeColor(p.color)}
                 strokeWidth={2}
-                rx={4}
               />
+              {/* ID du processus */}
+              <text
+                x={p.x}
+                y={p.y + fontSize * 0.35}
+                fontSize={fontSize}
+                fontWeight={600}
+                textAnchor="middle"
+                fill={p.color === 'white' ? '#000' : '#fff'}
+              >
+                {p.processId != null ? p.processId : `?${p.id}`}
+              </text>
+              
+              {/* Badge état interne - positionné radialement */}
               {p.badge && (
+                <g>
+                  <rect
+                    x={p.badgeX - badgeWidth / 2}
+                    y={p.badgeY - badgeHeight / 2}
+                    width={badgeWidth}
+                    height={badgeHeight}
+                    fill="#fff"
+                    stroke="#666"
+                    strokeWidth={2}
+                    rx={4}
+                  />
+                  {badgeLines.map((line, idx) => (
+                    <text
+                      key={idx}
+                      x={p.badgeX}
+                      y={p.badgeY - badgeHeight / 2 + 14 + idx * 14}
+                      fontSize={Math.min(10, fontSize)}
+                      fontWeight={700}
+                      textAnchor="middle"
+                      fill="#000"
+                    >
+                      {line.length > 12 ? line.substring(0, 11) + '…' : line}
+                    </text>
+                  ))}
+                  {/* Tooltip pour badge long */}
+                  {p.badge.length > 12 && (
+                    <title>{p.badge}</title>
+                  )}
+                </g>
+              )}
+              
+              {/* Indicateur leader (couronne) */}
+              {p.isLeader && (
                 <text
-                  x={p.badgeX}
-                  y={p.badgeY + 6}
-                  fontSize={10}
-                  fontWeight={700}
+                  x={p.x}
+                  y={p.y - nodeRadius - 5}
+                  fontSize={nodeRadius * 0.8}
                   textAnchor="middle"
-                  fill="#000"
                 >
-                  {p.badge.length > 9 ? p.badge.substring(0, 8) + '…' : p.badge}
+                  👑
                 </text>
               )}
             </g>
-            
-            {/* Indicateur leader (couronne) */}
-            {p.isLeader && (
-              <text
-                x={p.x}
-                y={p.y - nodeRadius - 5}
-                fontSize={14}
-                textAnchor="middle"
-              >
-                👑
-              </text>
-            )}
-          </g>
-        ))}
+          )
+        })}
       </g>
     </svg>
   )

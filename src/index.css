@@ -89,7 +89,7 @@ body {
 .visual-stage {
   min-height: 600px;
   height: calc(100vh - 200px);
-  overflow: hidden; /* Handled by InteractiveStage */
+  overflow: auto; /* Permettre le scroll pour Ring Election */
   padding: 0;
   background: #f8fafc;
   position: relative;
