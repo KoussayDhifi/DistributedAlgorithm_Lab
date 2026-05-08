@@ -30,7 +30,7 @@ body::after {
   content: '';
   position: fixed;
   inset: 0;
-  background: 
+  background:
     radial-gradient(circle at 10% 15%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
     radial-gradient(circle at 85% 90%, rgba(79, 70, 229, 0.08) 0%, transparent 50%),
     linear-gradient(145deg, #f4faff 0%, #eef6ff 45%, #e2effa 100%);
@@ -136,7 +136,7 @@ body::after {
   overflow: hidden;
   padding: 0;
   background-color: #ffffff;
-  background-image: 
+  background-image:
     linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
   background-size: 25px 25px;
@@ -207,13 +207,16 @@ body::after {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.1);
   border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
 }
