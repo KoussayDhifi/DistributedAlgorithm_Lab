@@ -435,9 +435,10 @@ function NetworkCanvas() {
 
   const [manualSnap, setManualSnap] = useState<SKSnapshot | null>(null)
 
-  const svgW = 960
-  const svgH = isSuzuki ? 720 : 500
-  const netCX = svgW / 2
+  const isHorizontal = ['lamport', 'vector', 'matrix', 'ricart'].includes(state.algorithm)
+  const svgW = isHorizontal ? Math.max(1200, state.steps.length * 40 + 200) : 960
+  const svgH = isSuzuki ? 720 : 480
+  const netCX = isHorizontal ? 150 : svgW / 2
   const netCY = isSuzuki ? 265 : svgH / 2
   const radius = isSuzuki ? 165 : Math.min(svgW, svgH) / 2 - 60
 
@@ -447,8 +448,13 @@ function NetworkCanvas() {
 
   const positions = new Map<number, { x: number; y: number }>()
   nodes.forEach((n, i) => {
-    const angle = (i * 2 * Math.PI) / Math.max(1, nodes.length) - Math.PI / 2
-    positions.set(n.id, { x: netCX + radius * Math.cos(angle), y: netCY + radius * Math.sin(angle) })
+    if (isHorizontal) {
+      const y = (i + 1) * (svgH / (nodes.length + 1))
+      positions.set(n.id, { x: 80, y })
+    } else {
+      const angle = (i * 2 * Math.PI) / Math.max(1, nodes.length) - Math.PI / 2
+      positions.set(n.id, { x: netCX + radius * Math.cos(angle), y: netCY + radius * Math.sin(angle) })
+    }
   })
 
   // Snapshot courant
@@ -472,6 +478,35 @@ function NetworkCanvas() {
   if (curStep?.type === 'narration') {
     narText  = curStep.text || ''
     narPhase = curStep.meta?.snapshot?.phase || 'INIT'
+  }
+
+  // Calculate centerOn for tracking
+  let centerOn: { x: number, y: number } | null = null
+  if (idx > 0) {
+    if (isHorizontal) {
+      // In horizontal mode, time always moves forward, so always track X.
+      // Y is centered on the canvas to avoid jumping up and down.
+      centerOn = { x: 100 + idx * 40, y: svgH / 2 }
+    } else {
+      // For circular layouts, trace back to the last node/message
+      for (let i = idx - 1; i >= 0; i--) {
+        const step = steps[i] as any
+        if (step.type === 'message') {
+          const p1 = positions.get(step.from)
+          const p2 = positions.get(step.to)
+          if (p1 && p2) {
+            centerOn = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+            break
+          }
+        } else if (step.type === 'node') {
+          const p = positions.get(step.nodeId)
+          if (p) {
+            centerOn = p
+            break
+          }
+        }
+      }
+    }
   }
 
   // Paires send/deliver
@@ -499,7 +534,9 @@ function NetworkCanvas() {
   const BG = '#ffff'
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', width: '100%' }}>
+      <InteractiveStage centerOn={centerOn}>
+        <div style={{ position: 'relative', display: 'inline-block' }}>
       {/* Bouton Reset pour état manuel */}
       {manualSnap && (
         <button onClick={() => setManualSnap(null)} style={{
@@ -574,8 +611,14 @@ function NetworkCanvas() {
           {pairs.map((pair, pairIdx) => {
             const { sendIndex, deliverIndex, send } = pair
             if (sendIndex >= idx) return null
-            const p1 = positions.get(send.from), p2 = positions.get(send.to)
+            
+            let p1 = positions.get(send.from), p2 = positions.get(send.to)
             if (!p1 || !p2) return null
+            
+            if (isHorizontal) {
+              p1 = { x: 80 + sendIndex * 40, y: p1.y }
+              p2 = { x: 80 + deliverIndex * 40, y: p2.y }
+            }
 
             const color   = colorFor(send)
             const msgType = String(send.msgType).toUpperCase()
@@ -681,8 +724,21 @@ function NetworkCanvas() {
         {/* ═══ NOEUDS ═══ */}
         <g>
           {nodes.map(n => {
-            const pos = positions.get(n.id)
+            let pos = positions.get(n.id)
             if (!pos) return null
+            
+            if (isHorizontal) {
+               // Render process line
+               return (
+                 <g key={n.id}>
+                   <line x1={80} y1={pos.y} x2={svgW} y2={pos.y} stroke="#e2e8f0" strokeWidth={2} strokeDasharray="4 4" />
+                   <g transform={`translate(${80 + idx * 40}, ${pos.y})`}>
+                      <circle r={25} fill="#0f2040" stroke="#3b82f6" strokeWidth={2} />
+                      <text y={5} fontSize={12} fontWeight={700} textAnchor="middle" fill="#e2e8f0">{n.label || `P${n.id}`}</text>
+                   </g>
+                 </g>
+               )
+            }
             
             let hasToken = false;
             if (isSuzuki) {
@@ -812,6 +868,8 @@ function NetworkCanvas() {
           </g>
         )}
       </svg>
+      </div>
+      </InteractiveStage>
     </div>
   )
 }
@@ -928,6 +986,8 @@ function SequenceCanvas() {
   }
 
   return (
+    <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', width: '100%' }}>
+      <InteractiveStage centerOn={{ x: stepX(idx), y: height / 2 }}>
     <svg width={width} height={height} style={{ background: '#fbfdff' }}>
       <defs>
         <filter id="seqShadow">
@@ -1131,6 +1191,8 @@ function SequenceCanvas() {
         </g>
       )}
     </svg>
+      </InteractiveStage>
+    </div>
   )
 }
 
@@ -1237,6 +1299,8 @@ function RicartCanvas() {
   }, [steps])
 
   return (
+    <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', width: '100%' }}>
+      <InteractiveStage centerOn={{ x: stepX(idx), y: height / 2 }}>
     <svg width={width} height={height} style={{ background: '#fff' }}>
       <defs>
         <marker id="arrow-ricart" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="6" markerHeight="6" orient="auto">
@@ -1409,6 +1473,8 @@ function RicartCanvas() {
         })}
       </g>
     </svg>
+      </InteractiveStage>
+    </div>
   )
 }
 
@@ -1424,9 +1490,9 @@ export default function GraphCanvas() {
   }
 
   return (
-    <InteractiveStage>
+    <>
       {renderCanvas()}
-    </InteractiveStage>
+    </>
   )
 }
 

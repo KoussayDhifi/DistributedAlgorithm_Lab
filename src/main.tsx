@@ -9,7 +9,7 @@ import App from './App'
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {/* On retire les props obsolètes car le fichier styles.css fait déjà le travail */}
-    <MantineProvider>
+    <MantineProvider forceColorScheme="light" theme={{ fontFamily: "'Outfit', sans-serif" }}>
       <App />
     </MantineProvider>
   </React.StrictMode>

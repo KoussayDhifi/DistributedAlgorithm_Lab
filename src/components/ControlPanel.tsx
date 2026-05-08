@@ -133,15 +133,16 @@ export default function ControlPanel({
                     style={{
                       padding: '8px 12px',
                       borderRadius: 8,
-                      border: `2px solid ${scenarioId === s.id ? '#228be6' : '#dee2e6'}`,
-                      background: scenarioId === s.id ? '#e7f5ff' : '#fff',
+                      border: `2px solid ${scenarioId === s.id ? 'var(--app-accent)' : '#e2e8f0'}`,
+                      background: scenarioId === s.id ? 'rgba(34, 139, 230, 0.05)' : '#fff',
                       cursor: 'pointer',
+                      transition: 'all 0.2s ease',
                     }}
                   >
-                    <Text size="sm" fw={600} c={scenarioId === s.id ? 'blue' : 'dark'}>
+                    <Text size="sm" fw={600} style={{ color: scenarioId === s.id ? 'var(--app-accent)' : 'var(--app-text)' }}>
                       {s.label}
                     </Text>
-                    <Text size="xs" c="dimmed">{s.description}</Text>
+                    <Text size="xs" style={{ color: 'var(--app-muted)' }}>{s.description}</Text>
                   </div>
                 ))}
               </Stack>
@@ -173,18 +174,18 @@ export default function ControlPanel({
       <Paper className="control-section" withBorder>
         <Stack gap="sm">
           <Group grow>
-            <Button color="green" onClick={onStart}>Run</Button>
-            <Button color="red" variant="light" onClick={onStop}>Stop</Button>
+            <Button variant="gradient" gradient={{ from: 'teal', to: 'green', deg: 105 }} onClick={onStart}>Run</Button>
+            <Button variant="light" color="red" onClick={onStop}>Stop</Button>
           </Group>
-          <Divider label="Algorithm action" labelPosition="center" />
-          {algorithm === 'ricart' && <Button variant="light" onClick={onRequestCS}>Request critical section</Button>}
-          {algorithm === 'token' && <Button variant="light" onClick={onPassToken}>Pass token</Button>}
-          {algorithm === 'bully' && <Button variant="light" onClick={onBullyElection}>Start election</Button>}
-          {algorithm === 'suzuki' && <Button variant="light" onClick={onSuzukiRequest}>Request critical section</Button>}
-          {algorithm === 'lamport' && <Button variant="light" onClick={onLamportScenario}>New Lamport scenario</Button>}
-          {algorithm === 'vector' && <Button variant="light" onClick={onVectorScenario}>New vector-clock scenario</Button>}
-          {algorithm === 'matrix' && <Button variant="light" onClick={onMatrixScenario}>New causal-delivery scenario</Button>}
-          <Button variant="subtle" onClick={onStep}>Deliver one step</Button>
+          <Divider label={<Text size="xs" c="var(--app-muted)">Algorithm action</Text>} labelPosition="center" />
+          {algorithm === 'ricart' && <Button variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }} onClick={onRequestCS}>Request critical section</Button>}
+          {algorithm === 'token' && <Button variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }} onClick={onPassToken}>Pass token</Button>}
+          {algorithm === 'bully' && <Button variant="gradient" gradient={{ from: 'violet', to: 'fuchsia' }} onClick={onBullyElection}>Start election</Button>}
+          {algorithm === 'suzuki' && <Button variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }} onClick={onSuzukiRequest}>Request critical section</Button>}
+          {algorithm === 'lamport' && <Button variant="gradient" gradient={{ from: 'grape', to: 'pink' }} onClick={onLamportScenario}>New Lamport scenario</Button>}
+          {algorithm === 'vector' && <Button variant="gradient" gradient={{ from: 'cyan', to: 'blue' }} onClick={onVectorScenario}>New vector-clock scenario</Button>}
+          {algorithm === 'matrix' && <Button variant="gradient" gradient={{ from: 'teal', to: 'cyan' }} onClick={onMatrixScenario}>New causal-delivery scenario</Button>}
+          <Button variant="subtle" color="gray" onClick={onStep}>Deliver one step</Button>
         </Stack>
       </Paper>
     </Stack>

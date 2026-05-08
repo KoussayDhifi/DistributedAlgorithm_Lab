@@ -6,14 +6,26 @@ interface Props {
   children: React.ReactNode
   width?: number | string
   height?: number | string
+  centerOn?: { x: number, y: number } | null
 }
 
-export default function InteractiveStage({ children, width = '100%', height = '100%' }: Props) {
+export default function InteractiveStage({ children, width = '100%', height = '100%', centerOn }: Props) {
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 })
+  const [isFollowing, setIsFollowing] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Auto-center when centerOn changes and we are in following mode
+  useEffect(() => {
+    if (centerOn && isFollowing && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const targetX = rect.width / 2 - centerOn.x * scale
+      const targetY = rect.height / 2 - centerOn.y * scale
+      setOffset({ x: targetX, y: targetY })
+    }
+  }, [centerOn, scale, isFollowing])
 
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -21,7 +33,6 @@ export default function InteractiveStage({ children, width = '100%', height = '1
       const delta = e.deltaY > 0 ? 0.9 : 1.1
       const newScale = Math.min(Math.max(0.1, scale * delta), 5)
       
-      // Zoom relative to mouse position
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
         const mouseX = e.clientX - rect.left
@@ -35,14 +46,15 @@ export default function InteractiveStage({ children, width = '100%', height = '1
       
       setScale(newScale)
     } else {
-      // Regular scroll translates
+      setIsFollowing(false)
       setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }))
     }
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 0 || e.button === 1) { // Left or middle click
+    if (e.button === 0 || e.button === 1) {
       setIsDragging(true)
+      setIsFollowing(false)
       setLastMousePos({ x: e.clientX, y: e.clientY })
     }
   }
@@ -63,6 +75,7 @@ export default function InteractiveStage({ children, width = '100%', height = '1
   const resetView = () => {
     setScale(1)
     setOffset({ x: 0, y: 0 })
+    setIsFollowing(true)
   }
 
   const zoomIn = () => setScale(prev => Math.min(prev * 1.2, 5))
@@ -78,7 +91,8 @@ export default function InteractiveStage({ children, width = '100%', height = '1
         position: 'relative',
         cursor: isDragging ? 'grabbing' : 'grab',
         touchAction: 'none',
-        background: 'transparent'
+        background: 'rgba(248, 250, 252, 0.5)',
+        borderRadius: 'inherit'
       }}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
@@ -90,7 +104,7 @@ export default function InteractiveStage({ children, width = '100%', height = '1
         style={{
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
           transformOrigin: '0 0',
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          transition: isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)',
           width: 'fit-content',
           height: 'fit-content'
         }}
@@ -106,33 +120,33 @@ export default function InteractiveStage({ children, width = '100%', height = '1
           bottom: 20, 
           right: 20, 
           zIndex: 10,
-          background: 'rgba(255, 255, 255, 0.8)',
-          padding: '4px 8px',
-          borderRadius: '10px',
-          backdropFilter: 'blur(4px)',
-          border: '1px solid rgba(0,0,0,0.1)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+          background: 'rgba(255, 255, 255, 0.9)',
+          padding: '6px 10px',
+          borderRadius: '12px',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(0,0,0,0.08)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.08)'
         }}
       >
         <Tooltip label="Zoom In (Ctrl + Scroll Up)">
-          <ActionIcon variant="subtle" color="gray" onClick={zoomIn}>
-            <IconZoomIn size={18} />
+          <ActionIcon variant="subtle" color="gray" onClick={zoomIn} size="lg">
+            <IconZoomIn size={20} />
           </ActionIcon>
         </Tooltip>
         <Tooltip label="Zoom Out (Ctrl + Scroll Down)">
-          <ActionIcon variant="subtle" color="gray" onClick={zoomOut}>
-            <IconZoomOut size={18} />
+          <ActionIcon variant="subtle" color="gray" onClick={zoomOut} size="lg">
+            <IconZoomOut size={20} />
           </ActionIcon>
         </Tooltip>
-        <Tooltip label="Reset View">
-          <ActionIcon variant="subtle" color="gray" onClick={resetView}>
-            <IconFocus2 size={18} />
+        <Tooltip label="Center and Follow">
+          <ActionIcon variant={isFollowing ? "filled" : "subtle"} color={isFollowing ? "blue" : "gray"} onClick={resetView} size="lg">
+            <IconFocus2 size={20} />
           </ActionIcon>
         </Tooltip>
-        <div style={{ width: 1, height: 16, background: '#ddd', margin: '0 4px' }} />
-        <Tooltip label="Pan Mode (Drag)">
-          <ActionIcon variant="light" color="blue">
-            <IconHandGrab size={18} />
+        <div style={{ width: 1, height: 20, background: '#eee', margin: '0 4px' }} />
+        <Tooltip label={isFollowing ? "Following active flow" : "Free pan mode"}>
+          <ActionIcon variant="light" color={isFollowing ? "blue" : "gray"} size="lg" onClick={() => setIsFollowing(!isFollowing)}>
+            <IconHandGrab size={20} />
           </ActionIcon>
         </Tooltip>
       </Group>
@@ -141,13 +155,14 @@ export default function InteractiveStage({ children, width = '100%', height = '1
       <div style={{
         position: 'absolute',
         bottom: 25,
-        left: 20,
-        fontSize: '10px',
-        fontWeight: 'bold',
-        color: '#999',
-        letterSpacing: '0.05em'
+        left: 24,
+        fontSize: '11px',
+        fontWeight: 600,
+        color: '#adb5bd',
+        letterSpacing: '0.02em',
+        fontFamily: 'monospace'
       }}>
-        ZOOM: {Math.round(scale * 100)}%
+        {Math.round(scale * 100)}%
       </div>
     </Box>
   )

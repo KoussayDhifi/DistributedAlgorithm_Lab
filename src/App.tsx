@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Badge, Card, Container, Group, Paper, Stack, Text, Title } from '@mantine/core'
+import { ActionIcon, Badge, Box, Button, Card, Container, Group, Modal, Paper, Stack, Text, Title, Tooltip } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
+import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from '@tabler/icons-react'
 import ControlPanel from './components/ControlPanel'
 import GraphCanvas from './features/sim/components/GraphCanvas'
 import RingSnapshotCanvas from './features/sim/components/RingSnapshotCanvas'
@@ -15,7 +17,7 @@ import type { Message } from './types'
 import type { RingVariant } from './features/sim/algorithms/ringElectionCinema'
 
 export default function App() {
-  const initialProcesses: Process[] = [1, 2, 3, 4, 5].map((id) => ({ id, state: 'idle', log: [] }))
+  const initialProcesses: Process[] = [1, 2, 3].map((id) => ({ id, state: 'idle', log: [] }))
   const [processes, setProcesses] = useState<Process[]>(initialProcesses)
   const [numberOfProcesses, setNumberOfProcesses] = useState<number>(initialProcesses.length)
   const [tokenHolder, setTokenHolder] = useState<number>(1)
@@ -28,8 +30,10 @@ export default function App() {
   const [selectedProcess, setSelectedProcess] = useState<number>(1)
   const [autoRun, setAutoRun] = useState<boolean>(true)
   const [speed, setSpeed] = useState<number>(300)
+  const [modalOpened, { open: openModal, close: closeModal }] = useDisclosure(false)
   const [algorithm, setAlgorithm] = useState<string>('ricart')
   const [scenarioId, setScenarioId] = useState<string>('scenario1')
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true)
 
   const algorithmMeta: Record<string, { label: string; tone: string; description: string }> = {
     ricart: { label: 'Ricart-Agrawala', tone: 'red', description: 'Mutual exclusion with timestamped requests and replies.' },
@@ -141,11 +145,12 @@ export default function App() {
     if (algorithm === 'token') return passToken()
     if (algorithm === 'bully') return startBullyElection()
     if (algorithm === 'suzuki') return requestSuzuki()
-    if (algorithm === 'lamport') return loadLamportClockScenario()
-    if (algorithm === 'vector') return loadVectorClockScenario()
-    if (algorithm === 'matrix') return loadMatrixClockScenario()
+    if (algorithm === 'lamport') { loadLamportClockScenario(); openModal(); return; }
+    if (algorithm === 'vector') { loadVectorClockScenario(); openModal(); return; }
+    if (algorithm === 'matrix') { loadMatrixClockScenario(); openModal(); return; }
     initSim(algorithm)
     appendLog(`Simulation ${activeAlgorithm.label} started`)
+    openModal()
   }
 
   // ── Ricart–Agrawala ────────────────────────────────────────────────────────
@@ -203,6 +208,7 @@ export default function App() {
         }
       } catch (e) { clearInterval(checkInterval) }
     }, 150)
+    openModal()
   }
 
   function step() {
@@ -232,6 +238,7 @@ export default function App() {
     } catch (e) {
       appendLog('Failed to load cinema payload: ' + String(e))
     }
+    openModal()
   }
 
   // ── Token Ring ─────────────────────────────────────────────────────────────
@@ -259,6 +266,7 @@ export default function App() {
     } catch (e) {
       appendLog('Failed to load cinema payload: ' + String(e))
     }
+    openModal()
   }
 
   // ── Suzuki-Kasami ──────────────────────────────────────────────────────────
@@ -286,6 +294,7 @@ export default function App() {
     } catch (e) {
       appendLog('Failed to load Suzuki-Kasami cinema: ' + String(e))
     }
+    openModal()
   }
 
   function handleSetAutoRun(v: boolean) {
@@ -350,6 +359,7 @@ export default function App() {
       appendLog('❌ Erreur: ' + String(e))
       console.error(e)
     }
+    openModal()
   }
   
   // Écouter les narrations de la simulation
@@ -432,10 +442,20 @@ export default function App() {
               <Badge size="lg" color={activeAlgorithm.tone} variant="light">{activeAlgorithm.label}</Badge>
               <Badge size="lg" color="gray" variant="outline">{numberOfProcesses} processes</Badge>
               <Badge size="lg" color={autoRun ? 'green' : 'gray'} variant="dot">{autoRun ? 'Auto run' : 'Manual'}</Badge>
+              <Tooltip label={sidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}>
+                <ActionIcon 
+                  variant="subtle" 
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  size="lg"
+                  className="sidebar-toggle"
+                >
+                  {sidebarOpen ? <IconLayoutSidebarLeftCollapse size={20} /> : <IconLayoutSidebarLeftExpand size={20} />}
+                </ActionIcon>
+              </Tooltip>
             </Group>
           </Paper>
-          <div className="content">
-            <Stack className="left" gap="md">
+          <div className="content-layout">
+            <aside className={`sidebar ${!sidebarOpen ? 'sidebar-closed' : ''}`}>
               <Card shadow="sm" radius="md" withBorder className="panel-card">
                 <ControlPanel
                   onStart={startCurrentScenario}
@@ -469,15 +489,45 @@ export default function App() {
               <Card shadow="sm" radius="md" withBorder className="panel-card log-card">
                 <LogView logs={logs} />
               </Card>
-            </Stack>
-            <div className="right">
+            </aside>
+
+            <main className="main-content">
+              <Modal 
+                opened={modalOpened} 
+                onClose={closeModal} 
+                size="95%" 
+                title={<Title order={3}>{activeAlgorithm.label} Animation</Title>}
+                overlayProps={{
+                  backgroundOpacity: 0.55,
+                  blur: 3,
+                }}
+                radius="md"
+              >
+                <Card withBorder p={0} radius="md" style={{ overflow: 'hidden' }}>
+                  <div className="workspace-toolbar">
+                    <React.Suspense fallback={null}>
+                      <TimelineControls />
+                    </React.Suspense>
+                  </div>
+                  <div className="visual-stage" style={{ minHeight: '70vh' }}>
+                    {algorithm === 'ring' ? (
+                      <RingSnapshotCanvas />
+                    ) : (
+                      <GraphCanvas />
+                    )}
+                  </div>
+                </Card>
+              </Modal>
+
               <Card shadow="sm" radius="md" withBorder className="workspace-card">
                 <div className="workspace-toolbar">
-                  <React.Suspense fallback={null}>
-                    <TimelineControls />
-                  </React.Suspense>
+                  <Group justify="space-between">
+                    <React.Suspense fallback={null}>
+                      <TimelineControls />
+                    </React.Suspense>
+                    <Button variant="light" size="xs" onClick={openModal}>Full View</Button>
+                  </Group>
                 </div>
-                {/* Afficher RingSnapshotCanvas uniquement pour Ring Election */}
                 <div className="visual-stage">
                   {algorithm === 'ring' ? (
                     <RingSnapshotCanvas />
@@ -486,7 +536,7 @@ export default function App() {
                   )}
                 </div>
               </Card>
-            </div>
+            </main>
           </div>
         </Container>
       </div>

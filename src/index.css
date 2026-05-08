@@ -1,27 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --app-text: #172033;
+  --app-muted: #667085;
+  --app-bg-deep: #f8fafc;
+  --app-surface: rgba(255, 255, 255, 0.8);
+  --app-surface-strong: rgba(255, 255, 255, 0.95);
+  --app-border: rgba(14, 165, 233, 0.12);
+  --app-accent: #228be6;
+  --app-accent-glow: rgba(34, 139, 230, 0.15);
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
+  background-color: var(--app-bg-deep);
 }
 
 body {
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background: #f4f7fb;
-  color: #172033;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  color: var(--app-text);
+  overflow-x: hidden;
+}
+
+/* Premium Light Mode Mesh Background */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: 
+    radial-gradient(circle at 10% 15%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 85% 90%, rgba(79, 70, 229, 0.08) 0%, transparent 50%),
+    linear-gradient(145deg, #f4faff 0%, #eef6ff 45%, #e2effa 100%);
+  z-index: -2;
+  pointer-events: none;
 }
 
 .app {
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(235, 241, 250, 0.92), rgba(246, 248, 252, 0.98)),
-    radial-gradient(circle at 15% 10%, rgba(77, 171, 247, 0.16), transparent 28%),
-    radial-gradient(circle at 90% 0%, rgba(12, 166, 120, 0.10), transparent 25%);
 }
 
 .app-shell {
   min-height: 100vh;
   padding: 18px;
+  position: relative;
+  z-index: 1;
 }
 
 .app-header {
@@ -29,100 +54,112 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 20px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 16px 24px;
+  border: 1px solid var(--app-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--app-surface);
   backdrop-filter: blur(12px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  margin-bottom: 20px;
 }
 
 .eyebrow {
-  color: #667085;
+  color: var(--app-accent);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.content {
-  display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
-  gap: 16px;
-  padding-top: 16px;
+.content-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
 }
 
-.left {
-  width: 100%;
+.sidebar {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
-.right {
+.sidebar-closed {
+  width: 0;
+  opacity: 0;
+  margin-right: -20px;
+  pointer-events: none;
+}
+
+.main-content {
+  flex: 1;
   min-width: 0;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Glass Panels */
 .panel-card,
 .workspace-card {
-  background: rgba(255, 255, 255, 0.94);
-  border-color: #dfe7f2;
+  background: var(--app-surface-strong) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 16px !important;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  color: var(--app-text) !important;
 }
 
 .workspace-card {
   min-height: calc(100vh - 150px);
   padding: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .workspace-toolbar {
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e4eaf3;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(8px);
-}
-
-.timeline-panel {
-  width: 100%;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--app-border);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
 }
 
 .visual-stage {
-  min-height: 600px;
-  height: calc(100vh - 200px);
-  overflow: hidden; /* Handled by InteractiveStage */
+  flex: 1;
+  min-height: 480px;
+  overflow: hidden;
   padding: 0;
-  background: #f8fafc;
+  background-color: #ffffff;
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 25px 25px;
   position: relative;
-}
-
-.visual-stage > div {
-  width: 100%;
-  height: 100%;
-}
-
-.visual-stage svg {
-  display: block;
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  background: transparent !important;
+  border-radius: 0 0 16px 16px;
 }
 
 .control-section {
-  padding: 12px;
-  border-radius: 10px;
-  background: #fbfcff;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fbfcfe !important;
+  border: 1px solid #edf2f7 !important;
 }
 
 .log-card {
-  min-height: 390px;
+  flex: 1;
+  min-height: 350px;
 }
 
 .log-scroll {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #edf2f7;
   border-radius: 10px;
-  background: #f8fafc;
+  background: #ffffff;
 }
 
 .log-entry {
@@ -130,32 +167,59 @@ body {
   grid-template-columns: 76px minmax(0, 1fr);
   align-items: flex-start;
   gap: 8px;
-  padding: 8px;
-  border: 1px solid #edf2f7;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--app-text);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
 }
 
 .log-message {
   white-space: pre-wrap;
-  line-height: 1.35;
+  line-height: 1.4;
+  color: var(--app-muted);
+}
+
+/* Sidebar Toggle Button Styling */
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-strong);
+  color: var(--app-accent);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-toggle:hover {
+  background: #f0f7ff;
+  border-color: var(--app-accent);
+  transform: translateY(-1px);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 @media (max-width: 980px) {
-  .app-shell {
-    padding: 12px;
-  }
-
-  .app-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .content {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-card {
-    min-height: auto;
+  .sidebar {
+    display: none;
   }
 }
