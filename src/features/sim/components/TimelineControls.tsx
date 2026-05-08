@@ -1,23 +1,28 @@
-import { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { ActionIcon, Badge, Button, Group, Progress, Slider, Stack, Text } from '@mantine/core'
 import { useSim } from '../state/SimProvider'
 
 export default function TimelineControls() {
   const { state, dispatch } = useSim()
+  const isFirstRender = useRef(true)
 
   useEffect(() => {
     let id: any = null
     if (state.playing) {
       // Auto-scroll when starting play - target the modal version if it exists
-      const target = document.querySelector('.mantine-Modal-body .visual-stage') ||
-        document.querySelector('.visual-stage');
+      // BUT: only if this isn't the first render (prevents scroll on modal open)
+      if (!isFirstRender.current) {
+        const target = document.querySelector('.mantine-Modal-body .visual-stage') ||
+          document.querySelector('.visual-stage');
 
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
 
       id = setInterval(() => {
         dispatch({ type: 'STEP_FORWARD' })
       }, state.speed)
     }
+    isFirstRender.current = false
     return () => {
       if (id) clearInterval(id)
     }

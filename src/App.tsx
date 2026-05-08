@@ -141,12 +141,6 @@ export default function App() {
   }
 
   function startCurrentScenario() {
-    // Scroll down slightly to focus on simulation
-    setTimeout(() => {
-      const target = document.querySelector('.mantine-Modal-body .visual-stage') ||
-        document.querySelector('.visual-stage');
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
 
     if (algorithm === 'ricart') return requestCS()
     if (algorithm === 'token') return passToken()
