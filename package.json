@@ -9,20 +9,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "@mantine/core": "^7.5.3",
     "@mantine/hooks": "^7.5.3",
+    "@tabler/icons-react": "^3.43.0",
+    "d3": "^7.8.5",
     "konva": "^9.3.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-konva": "^18.0.4",
-    "uuid": "^9.0.0",
-    "d3": "^7.8.5"
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.1.6",
-    "vite": "^5.2.0",
-    "@vitejs/plugin-react": "^5.0.0",
     "@types/react": "^18.2.21",
-    "@types/react-dom": "^18.2.7"
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.1.6",
+    "vite": "^5.2.0"
   }
 }

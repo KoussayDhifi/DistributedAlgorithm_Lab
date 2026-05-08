@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useSim } from '../state/SimProvider'
+import InteractiveStage from './InteractiveStage'
 import type { MessageStep, AlgorithmStep, CinemaNodeState } from '../model/algorithmCinema'
 import type { SKSnapshot } from '../algorithms/suzukiKasamiCinema'
 
@@ -818,19 +819,22 @@ function NetworkCanvas() {
 // --- SequenceCanvas -----------------------------------------------------------
 function SequenceCanvas() {
   const { state } = useSim()
-  const width = 900
-  const height = 500
-  const leftMargin = 120
-  const rightMargin = 20
-  const topMargin = 30
-  const bottomMargin = 20
-
   const nodes = deriveNodes(state.processes, state.steps, state.index)
   const steps = state.steps
   const idx = state.index
   const visibleSteps = steps.slice(0, idx)
 
-  const laneHeight = Math.max(40, (height - topMargin - bottomMargin) / Math.max(1, nodes.length))
+  // Dynamic sizing based on content
+  const nodeCount = Math.max(1, nodes.length)
+  const laneHeight = 100 // Increased for matrix visibility
+  const width = Math.max(1000, steps.length * 40)
+  const height = nodeCount * laneHeight + 100
+  
+  const leftMargin = 140
+  const rightMargin = 40
+  const topMargin = 60
+  const bottomMargin = 40
+
   const usableWidth = width - leftMargin - rightMargin
   const maxSteps = Math.max(1, steps.length)
 
@@ -969,8 +973,14 @@ function SequenceCanvas() {
               {n.badges?.H !== undefined && <text x={62} y={y + 5} fontSize={11} fill="#0ea5e9" fontWeight="bold">H={String(n.badges.H)}</text>}
               {matrixRows.length > 0 && (
                 <g>
+                  <rect 
+                    x={58} y={y - 18} 
+                    width={80} height={matrixRows.length * 12 + 8} 
+                    rx={6} fill="rgba(241, 245, 249, 0.9)" 
+                    stroke="#cbd5e1" 
+                  />
                   {matrixRows.map((row, rowIndex) => (
-                    <text key={rowIndex} x={62} y={y - 12 + rowIndex * 11} fontSize={10} fontFamily="monospace" fill="#555">
+                    <text key={rowIndex} x={66} y={y - 6 + rowIndex * 12} fontSize={10} fontFamily="monospace" fontWeight="bold" fill="#334155">
                       {row}
                     </text>
                   ))}
@@ -1020,11 +1030,22 @@ function SequenceCanvas() {
                 />
                 <rect x={mx - labelWidth / 2} y={my - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} filter="url(#seqShadow)" />
                 <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
-                {send.meta?.vector && <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>}
-                {send.meta?.H !== undefined && <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color} fontWeight="bold">H={String(send.meta.H)}</text>}
-                {matrixRows.map((row, rowIndex) => (
-                  <text key={rowIndex} x={mx} y={my + 22 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={color}>{row}</text>
-                ))}
+                {matrixRows.length > 0 && (
+                  <g>
+                    <rect 
+                      x={mx - 35} y={my + 12} 
+                      width={70} height={matrixRows.length * 12 + 6} 
+                      rx={6} fill="rgba(255, 255, 255, 0.95)" 
+                      stroke={color} strokeWidth={1}
+                      filter="url(#seqShadow)"
+                    />
+                    {matrixRows.map((row, rowIndex) => (
+                      <text key={rowIndex} x={mx} y={my + 23 + rowIndex * 12} fontSize={10} textAnchor="middle" fontFamily="monospace" fontWeight="bold" fill={color}>
+                        {row}
+                      </text>
+                    ))}
+                  </g>
+                )}
               </g>
             )
           }
@@ -1072,10 +1093,32 @@ function SequenceCanvas() {
                 </g>
               )}
               <text x={x} y={y - 10} fontSize={10} textAnchor="middle" fill="#222" fontWeight={700}>{event}</text>
-              {(vector || H) && <text x={x} y={y + 20} fontSize={10} textAnchor="middle" fill={color} fontWeight={H ? 'bold' : 'normal'}>{vector || H}</text>}
-              {matrixRows.map((row, rowIndex) => (
-                <text key={rowIndex} x={x} y={y + 20 + rowIndex * 11} fontSize={10} textAnchor="middle" fill={rejected ? '#e03131' : color}>{row}</text>
-              ))}
+              {(vector || H || matrixRows.length > 0) && (
+                <g>
+                  <rect 
+                    x={x - 35} y={y + 12} 
+                    width={70} height={(vector || H ? 14 : 0) + matrixRows.length * 12 + 6} 
+                    rx={6} fill="rgba(255, 255, 255, 0.9)" 
+                    stroke={rejected ? '#e03131' : color} strokeWidth={1.5}
+                    filter="url(#seqShadow)"
+                  />
+                  {(vector || H) && (
+                    <text x={x} y={y + 24} fontSize={10} textAnchor="middle" fill={color} fontWeight="bold">
+                      {vector || H}
+                    </text>
+                  )}
+                  {matrixRows.map((row, rowIndex) => (
+                    <text 
+                      key={rowIndex} 
+                      x={x} y={y + (vector || H ? 36 : 24) + rowIndex * 12} 
+                      fontSize={10} textAnchor="middle" fontFamily="monospace" fontWeight="bold" 
+                      fill={rejected ? '#e03131' : color}
+                    >
+                      {row}
+                    </text>
+                  ))}
+                </g>
+              )}
             </g>
           )
         })}
@@ -1371,9 +1414,19 @@ function RicartCanvas() {
 
 export default function GraphCanvas() {
   const { state } = useSim()
-  if (state.algorithm === 'ricart') return <RicartCanvas />
-  return (state.algorithm === 'bully' || state.algorithm === 'token' || state.algorithm === 'suzuki')
-    ? <NetworkCanvas />
-    : <SequenceCanvas />
+  
+  const renderCanvas = () => {
+    if (state.algorithm === 'ricart') return <RicartCanvas />
+    if (state.algorithm === 'bully' || state.algorithm === 'token' || state.algorithm === 'suzuki') {
+      return <NetworkCanvas />
+    }
+    return <SequenceCanvas />
+  }
+
+  return (
+    <InteractiveStage>
+      {renderCanvas()}
+    </InteractiveStage>
+  )
 }
 

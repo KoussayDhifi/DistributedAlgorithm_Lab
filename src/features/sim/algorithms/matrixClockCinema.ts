@@ -202,12 +202,9 @@ export function generateMatrixClockCinema(processes: number[]): AlgorithmCinemaP
     const label = nextEventLabel(message.to)
 
     matrix[receiver][receiver] += 1
-    matrix[receiver][sender] += 1
 
     for (let k = 0; k < size; k += 1) {
-      if (k === receiver) continue
       for (let l = 0; l < size; l += 1) {
-        if (l === receiver) continue
         matrix[k][l] = Math.max(matrix[k][l], stamp[k][l])
       }
     }
