@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Stack, Title, Group, Select, Slider, Switch, NumberInput, Text } from '@mantine/core'
+import { Badge, Button, Divider, Group, NumberInput, Paper, Select, Slider, Stack, Switch, Text, Title } from '@mantine/core'
 import RingElectionControls from './RingElectionControls'
 import type { RingVariant } from '../features/sim/algorithms/ringElectionCinema'
 
@@ -50,6 +50,18 @@ const scenarios = [
   },
 ]
 
+const algorithmOptions = [
+  { value: 'ricart', label: 'Ricart-Agrawala' },
+  { value: 'token', label: 'Token Ring' },
+  { value: 'bully', label: 'Bully Election' },
+  { value: 'ring', label: 'Ring Election' },
+  { value: 'suzuki', label: 'Suzuki-Kasami' },
+  { value: 'lamport', label: 'Horloge de Lamport' },
+  { value: 'vector', label: 'Horloge Vectorielle (Mattern)' },
+  { value: 'matrix', label: 'Horloge Matricielle' },
+]
+
+
 export default function ControlPanel({
   onStart, onStop, onRequestCS, onPassToken, onStep, onRunRingElection, onBullyElection, onSuzukiRequest,
   onLamportScenario, onVectorScenario, onMatrixScenario,
@@ -60,102 +72,121 @@ export default function ControlPanel({
   tokenHolder, setTokenHolder,
   scenarioId, setScenarioId,
 }: Props) {
+  const requesterLabel = algorithm === 'bully' ? 'Initiator' : 'Requester'
+  const processOptions = processes.map((p) => ({ value: String(p), label: `Process ${p}` }))
+
   return (
-    <Stack>
-      <Title order={4}>Controls</Title>
-      <Group>
-        <Button color="green" onClick={onStart}>Start</Button>
-        <Button color="red" onClick={onStop}>Stop</Button>
+    <Stack gap="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Text className="eyebrow">Experiment</Text>
+          <Title order={4}>Setup</Title>
+        </div>
+        <Badge variant="light" color={autoRun ? 'green' : 'gray'}>
+          {autoRun ? 'Auto' : 'Step'}
+        </Badge>
       </Group>
-      <Select
-        label="Algorithm"
-        value={algorithm}
-        onChange={(v) => setAlgorithm(String(v))}
-        data={[
-          { value: 'ricart', label: 'Ricart-Agrawala' },
-          { value: 'token', label: 'Token Ring' },
-          { value: 'bully', label: 'Bully Election' },
-          { value: 'ring', label: 'Ring Election' },
-          { value: 'lamport', label: 'Horloge de Lamport' },
-          { value: 'vector', label: 'Horloge Vectorielle (Mattern)' },
-          { value: 'matrix', label: 'Horloge Matricielle' },
-          { value: 'suzuki', label: 'Suzuki-Kasami' },
-        ]}
-      />
-      <NumberInput
-        label="Processes"
-        value={numberOfProcesses}
-        min={1}
-        max={50}
-        onChange={(v) => setNumberOfProcesses(Number(v) || 1)}
-      />
 
-      {algorithm === 'ring' && onRunRingElection && (
-        <RingElectionControls
-          numberOfProcesses={numberOfProcesses}
-          onRunElection={onRunRingElection}
-        />
-      )}
-
-      {algorithm !== 'ring' && (
-        <>
+      <Paper className="control-section" withBorder>
+        <Stack gap="sm">
           <Select
-            label="Requester"
-            value={String(selectedProcess)}
-            onChange={(v) => setSelectedProcess(Number(v))}
-            data={processes.map((p) => ({ value: String(p), label: `Process ${p}` }))}
+            label="Algorithm"
+            value={algorithm}
+            onChange={(v) => setAlgorithm(String(v))}
+            data={algorithmOptions}
+            searchable
           />
-          {algorithm === 'suzuki' && (
+          <NumberInput
+            label="Processes"
+            value={numberOfProcesses}
+            min={1}
+            max={50}
+            clampBehavior="strict"
+            onChange={(v) => setNumberOfProcesses(Number(v) || 1)}
+          />
+        </Stack>
+      </Paper>
+
+      {algorithm === 'ring' && onRunRingElection ? (
+        <Paper className="control-section" withBorder>
+          <RingElectionControls
+            numberOfProcesses={numberOfProcesses}
+            onRunElection={onRunRingElection}
+          />
+        </Paper>
+      ) : (
+        <Paper className="control-section" withBorder>
+          <Stack gap="sm">
             <Select
-              label="Token Holder initial"
-              value={String(tokenHolder)}
-              onChange={(v) => setTokenHolder(Number(v))}
-              data={processes.map((p) => ({ value: String(p), label: `Process ${p}` }))}
+              label={requesterLabel}
+              value={String(selectedProcess)}
+              onChange={(v) => setSelectedProcess(Number(v))}
+              data={processOptions}
             />
-          )}
-          <Group gap="xs" align="center">
-            <Switch label="Auto Run" checked={autoRun} onChange={(e) => setAutoRun(e.currentTarget.checked)} />
-          </Group>
-          <Slider label={`Speed: ${speed} ms`} min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
-
-          {/* Sélecteur de scénario — uniquement pour Ricart-Agrawala */}
-          {algorithm === 'ricart' && (
-            <Stack gap={6} mb="sm">
-              <Text size="sm" fw={500}>Scénario</Text>
-              {scenarios.map((s) => (
-                <div
-                  key={s.id}
-                  onClick={() => setScenarioId(s.id)}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: `2px solid ${scenarioId === s.id ? '#228be6' : '#dee2e6'}`,
-                    background: scenarioId === s.id ? '#e7f5ff' : '#fff',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Text size="sm" fw={600} c={scenarioId === s.id ? 'blue' : 'dark'}>
-                    {s.label}
-                  </Text>
-                  <Text size="xs" c="dimmed">{s.description}</Text>
-                </div>
-              ))}
-            </Stack>
-          )}
-
-          {algorithm === 'ricart' && <Button onClick={onRequestCS}>Request CS (Ricart-Agrawala)</Button>}
-          {algorithm === 'token' && <Button onClick={onPassToken}>Pass Token (Token Ring)</Button>}
-          {algorithm === 'bully' && <Button onClick={onBullyElection}>Start Bully Election</Button>}
-          {algorithm === 'suzuki' && <Button onClick={onSuzukiRequest}>Request CS (Suzuki-Kasami)</Button>}
-          {algorithm === 'lamport' && <Button onClick={onLamportScenario}>New Random Scenario</Button>}
-          {algorithm === 'vector' && <Button onClick={onVectorScenario}>New Random Scenario</Button>}
-          {algorithm === 'matrix' && <Button onClick={onMatrixScenario}>New Causal Delivery Scenario</Button>}
-
-          <Group>
-            <Button onClick={onStep}>Step</Button>
-          </Group>
-        </>
+            {algorithm === 'ricart' && (
+              <Stack gap={6} mb="sm">
+                <Text size="sm" fw={500}>Scénario</Text>
+                {scenarios.map((s) => (
+                  <div
+                    key={s.id}
+                    onClick={() => setScenarioId(s.id)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: `2px solid ${scenarioId === s.id ? '#228be6' : '#dee2e6'}`,
+                      background: scenarioId === s.id ? '#e7f5ff' : '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Text size="sm" fw={600} c={scenarioId === s.id ? 'blue' : 'dark'}>
+                      {s.label}
+                    </Text>
+                    <Text size="xs" c="dimmed">{s.description}</Text>
+                  </div>
+                ))}
+              </Stack>
+            )}
+            {algorithm === 'suzuki' && (
+              <Select
+                label="Initial token holder"
+                value={String(tokenHolder)}
+                onChange={(v) => setTokenHolder(Number(v))}
+                data={processOptions}
+              />
+            )}
+            <Switch
+              label="Auto deliver queued messages"
+              checked={autoRun}
+              onChange={(e) => setAutoRun(e.currentTarget.checked)}
+            />
+            <div>
+              <Group justify="space-between" mb={4}>
+                <Text size="sm" fw={500}>Realtime speed</Text>
+                <Text size="xs" c="dimmed">{speed} ms</Text>
+              </Group>
+              <Slider min={50} max={2000} step={50} value={speed} onChange={(v) => setSpeed(v)} />
+            </div>
+          </Stack>
+        </Paper>
       )}
+
+      <Paper className="control-section" withBorder>
+        <Stack gap="sm">
+          <Group grow>
+            <Button color="green" onClick={onStart}>Run</Button>
+            <Button color="red" variant="light" onClick={onStop}>Stop</Button>
+          </Group>
+          <Divider label="Algorithm action" labelPosition="center" />
+          {algorithm === 'ricart' && <Button variant="light" onClick={onRequestCS}>Request critical section</Button>}
+          {algorithm === 'token' && <Button variant="light" onClick={onPassToken}>Pass token</Button>}
+          {algorithm === 'bully' && <Button variant="light" onClick={onBullyElection}>Start election</Button>}
+          {algorithm === 'suzuki' && <Button variant="light" onClick={onSuzukiRequest}>Request critical section</Button>}
+          {algorithm === 'lamport' && <Button variant="light" onClick={onLamportScenario}>New Lamport scenario</Button>}
+          {algorithm === 'vector' && <Button variant="light" onClick={onVectorScenario}>New vector-clock scenario</Button>}
+          {algorithm === 'matrix' && <Button variant="light" onClick={onMatrixScenario}>New causal-delivery scenario</Button>}
+          <Button variant="subtle" onClick={onStep}>Deliver one step</Button>
+        </Stack>
+      </Paper>
     </Stack>
   )
 }

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { Button, Group, Slider, Text } from '@mantine/core'
+import { ActionIcon, Badge, Button, Group, Progress, Slider, Stack, Text } from '@mantine/core'
 import { useSim } from '../state/SimProvider'
 
 export default function TimelineControls() {
@@ -16,8 +16,7 @@ export default function TimelineControls() {
       if (id) clearInterval(id)
     }
   }, [state.playing, state.speed, dispatch])
-  
-  // Émettre les narrations quand l'index change
+
   useEffect(() => {
     if (state.index > 0 && state.index <= state.steps.length) {
       const step = state.steps[state.index - 1]
@@ -28,41 +27,60 @@ export default function TimelineControls() {
   }, [state.index, state.steps])
 
   const stepsCount = state.steps.length
+  const progress = stepsCount === 0 ? 0 : Math.round((state.index / stepsCount) * 100)
+  const currentStep = state.index > 0 ? state.steps[state.index - 1] : undefined
+  const currentType = currentStep?.type ?? 'idle'
 
   return (
-    <div style={{ marginBottom: 8 }}>
-      <Group spacing="xs">
-        <Button size="xs" onClick={() => dispatch({ type: 'STEP_BACK' })}>◀◀</Button>
-        {!state.playing ? (
-          <Button size="xs" onClick={() => dispatch({ type: 'PLAY' })}>Play ▶</Button>
-        ) : (
-          <Button size="xs" onClick={() => dispatch({ type: 'PAUSE' })}>Pause ⏸</Button>
-        )}
-        <Button size="xs" onClick={() => dispatch({ type: 'STEP_FORWARD' })}>▶</Button>
-        <Text size="sm">{state.index}/{stepsCount}</Text>
+    <Stack gap="xs" className="timeline-panel">
+      <Group justify="space-between" align="center">
+        <Group gap="xs">
+          <ActionIcon variant="light" size="lg" onClick={() => dispatch({ type: 'STEP_BACK' })} disabled={state.index === 0}>
+            <span aria-hidden>‹</span>
+          </ActionIcon>
+          {!state.playing ? (
+            <Button size="sm" onClick={() => dispatch({ type: 'PLAY' })} disabled={stepsCount === 0}>Play</Button>
+          ) : (
+            <Button size="sm" color="orange" onClick={() => dispatch({ type: 'PAUSE' })}>Pause</Button>
+          )}
+          <ActionIcon variant="light" size="lg" onClick={() => dispatch({ type: 'STEP_FORWARD' })} disabled={state.index >= stepsCount}>
+            <span aria-hidden>›</span>
+          </ActionIcon>
+        </Group>
+        <Group gap="xs">
+          <Badge color={currentType === 'message' ? 'blue' : currentType === 'node' ? 'green' : currentType === 'narration' ? 'grape' : 'gray'} variant="light">
+            {currentType}
+          </Badge>
+          <Text size="sm" fw={600}>{state.index}/{stepsCount}</Text>
+        </Group>
       </Group>
 
-      <div style={{ marginTop: 8 }}>
+      <Progress value={progress} size="sm" radius="xl" />
+
+      <div>
         <Slider
           min={0}
           max={Math.max(0, stepsCount)}
           step={1}
           value={state.index}
           onChange={(v) => dispatch({ type: 'SET_INDEX', index: v })}
+          disabled={stepsCount === 0}
+          label={(v) => `Step ${v}`}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Text size="xs">Speed</Text>
-          <Slider
-            min={50}
-            max={2000}
-            step={50}
-            value={state.speed}
-            onChange={(v) => dispatch({ type: 'SET_SPEED', speed: v })}
-            style={{ flex: 1 }}
-          />
-          <Text size="xs">{state.speed}ms</Text>
-        </div>
       </div>
-    </div>
+
+      <Group gap="sm" align="center">
+        <Text size="xs" c="dimmed" w={44}>Speed</Text>
+        <Slider
+          min={50}
+          max={2000}
+          step={50}
+          value={state.speed}
+          onChange={(v) => dispatch({ type: 'SET_SPEED', speed: v })}
+          style={{ flex: 1 }}
+        />
+        <Text size="xs" c="dimmed" w={58} ta="right">{state.speed}ms</Text>
+      </Group>
+    </Stack>
   )
 }

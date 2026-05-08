@@ -1,27 +1,40 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { Text, Title, Button, Group } from '@mantine/core'
+import { Badge, Button, Group, ScrollArea, Stack, Text, Title } from '@mantine/core'
+
+function splitLog(entry: string) {
+  const parts = entry.split(' ')
+  if (parts.length < 2) return { time: '', message: entry }
+  return { time: parts[0], message: parts.slice(1).join(' ') }
+}
+
+function colorForLog(message: string) {
+  const m = message.toLowerCase()
+  if (m.includes('failed') || m.includes('error') || m.includes('non delivrable')) return 'red'
+  if (m.includes('loaded') || m.includes('started') || m.includes('démarr')) return 'green'
+  if (m.includes('deliver')) return 'blue'
+  return 'gray'
+}
 
 export default function LogView({ logs }: { logs: string[] }) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const [scrollPercent, setScrollPercent] = useState(100)
 
   useEffect(() => {
-    // auto-scroll to bottom when new logs appended
-    const el = containerRef.current
+    const el = viewportRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
     setScrollPercent(100)
   }, [logs])
 
   function scrollToTop() {
-    const el = containerRef.current
+    const el = viewportRef.current
     if (!el) return
     el.scrollTop = 0
     setScrollPercent(0)
   }
 
   function scrollToBottom() {
-    const el = containerRef.current
+    const el = viewportRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
     setScrollPercent(100)
@@ -30,28 +43,39 @@ export default function LogView({ logs }: { logs: string[] }) {
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget
     const pct = Math.round((el.scrollTop / (el.scrollHeight - el.clientHeight || 1)) * 100)
-    setScrollPercent(isNaN(pct) ? 0 : pct)
+    setScrollPercent(Number.isNaN(pct) ? 0 : pct)
   }
 
   return (
-    <div>
-      <Title order={5}>Event Log</Title>
-      <Group position="apart" style={{ marginBottom: 6 }}>
-        <Group spacing="xs">
-          <Button size="xs" onClick={scrollToTop}>Top</Button>
-          <Button size="xs" onClick={scrollToBottom}>Bottom</Button>
-        </Group>
-        <div style={{ fontSize: 12, color: '#666' }}>{scrollPercent}%</div>
+    <Stack gap="sm">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Text className="eyebrow">Runtime</Text>
+          <Title order={5}>Event Log</Title>
+        </div>
+        <Badge variant="light" color="gray">{logs.length}</Badge>
       </Group>
-      <div
-        ref={containerRef}
-        onScroll={onScroll}
-        style={{ height: 300, overflowY: 'auto', padding: 8, border: '1px solid #eee', borderRadius: 6, background: 'white' }}
-      >
-        {logs.map((l, i) => (
-          <Text key={i} size="sm" style={{ whiteSpace: 'pre-wrap', marginBottom: 6 }}>{l}</Text>
-        ))}
-      </div>
-    </div>
+      <Group gap="xs">
+        <Button size="xs" variant="light" onClick={scrollToTop}>Top</Button>
+        <Button size="xs" variant="light" onClick={scrollToBottom}>Bottom</Button>
+        <Text size="xs" c="dimmed">{scrollPercent}%</Text>
+      </Group>
+      <ScrollArea h={300} viewportRef={viewportRef} onScroll={onScroll} className="log-scroll">
+        <Stack gap={6} p="xs">
+          {logs.length === 0 && (
+            <Text size="sm" c="dimmed">Run an algorithm to see events here.</Text>
+          )}
+          {logs.map((entry, i) => {
+            const { time, message } = splitLog(entry)
+            return (
+              <div key={`${entry}-${i}`} className="log-entry">
+                <Badge size="xs" variant="light" color={colorForLog(message)}>{time || 'log'}</Badge>
+                <Text size="sm" className="log-message">{message}</Text>
+              </div>
+            )
+          })}
+        </Stack>
+      </ScrollArea>
+    </Stack>
   )
 }

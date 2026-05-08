@@ -924,8 +924,11 @@ function SequenceCanvas() {
   }
 
   return (
-    <svg width={width} height={height} style={{ background: '#fff' }}>
+    <svg width={width} height={height} style={{ background: '#fbfdff' }}>
       <defs>
+        <filter id="seqShadow">
+          <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#1d2939" floodOpacity="0.12" />
+        </filter>
         <marker id="arrow" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M0,-5L10,0L0,5" fill="#000" />
         </marker>
@@ -935,7 +938,7 @@ function SequenceCanvas() {
       </defs>
 
       <g>
-        <line x1={leftMargin} y1={topMargin - 10} x2={width - rightMargin} y2={topMargin - 10} stroke="#ddd" />
+        <line x1={leftMargin} y1={topMargin - 10} x2={width - rightMargin} y2={topMargin - 10} stroke="#cbd5e1" />
         {Array.from({ length: Math.min(20, maxSteps) }).map((_, i) => {
           const sx = leftMargin + (i / Math.min(20, maxSteps)) * usableWidth
           return <line key={i} x1={sx} y1={topMargin - 14} x2={sx} y2={topMargin - 6} stroke="#ccc" />
@@ -949,6 +952,15 @@ function SequenceCanvas() {
           const matrixRows = Array.isArray(n.badges?.matrixRows) ? n.badges.matrixRows as string[] : []
           return (
             <g key={n.id}>
+              <rect
+                x={leftMargin - 10}
+                y={y - laneHeight / 2 + 8}
+                width={width - leftMargin - rightMargin}
+                height={Math.max(26, laneHeight - 16)}
+                rx={10}
+                fill={i % 2 === 0 ? '#f8fafc' : '#ffffff'}
+                stroke="#edf2f7"
+              />
               <text x={10} y={y + 5} fontSize={13} fontWeight={600}>
                 {n.label ?? `P${n.id}`}
                 {n.badges?.token === '??' && <tspan dx={4}>??</tspan>}
@@ -964,7 +976,7 @@ function SequenceCanvas() {
                   ))}
                 </g>
               )}
-              <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#e6e6e6" strokeWidth={2} />
+              <line x1={leftMargin} y1={y} x2={width - rightMargin} y2={y} stroke="#d8e1ec" strokeWidth={2} />
               {n.color === 'orange' && (
                 <rect x={width - rightMargin - 60} y={y - 12} rx={4} width={48} height={24} fill="orange" stroke="#b85" />
               )}
@@ -1006,7 +1018,7 @@ function SequenceCanvas() {
                   strokeDasharray={send.meta?.rejected ? '7 4' : undefined}
                   markerEnd={send.meta?.rejected ? 'url(#arrow-red)' : 'url(#arrow)'}
                 />
-                <rect x={mx - labelWidth / 2} y={my - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
+                <rect x={mx - labelWidth / 2} y={my - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} filter="url(#seqShadow)" />
                 <text x={mx} y={my + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
                 {send.meta?.vector && <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>}
                 {send.meta?.H !== undefined && <text x={mx} y={my + 21} fontSize={10} textAnchor="middle" fill={color} fontWeight="bold">H={String(send.meta.H)}</text>}
@@ -1025,7 +1037,7 @@ function SequenceCanvas() {
           return (
             <g key={`${send.id}-inflight-${i}`}>
               <line x1={originX} y1={originY} x2={cx2} y2={cy2} stroke={color} strokeWidth={2} markerEnd="url(#arrow)" strokeDasharray="4 3" />
-              <rect x={mx2 - labelWidth / 2} y={my2 - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} />
+              <rect x={mx2 - labelWidth / 2} y={my2 - 12} rx={6} width={labelWidth} height={20} fill="#fff" stroke={color} filter="url(#seqShadow)" />
               <text x={mx2} y={my2 + 5} fontSize={11} textAnchor="middle" fill="#000">{send.msgType}</text>
               {send.meta?.vector && <text x={mx2} y={my2 + 21} fontSize={10} textAnchor="middle" fill={color}>{String(send.meta.vector)}</text>}
               {send.meta?.H !== undefined && <text x={mx2} y={my2 + 21} fontSize={10} textAnchor="middle" fill={color} fontWeight="bold">H={String(send.meta.H)}</text>}
@@ -1052,7 +1064,7 @@ function SequenceCanvas() {
           const rejected = Boolean(step.state.badges?.rejected)
           return (
             <g key={step.id}>
-              <circle cx={x} cy={y} r={5} fill={rejected ? '#e03131' : color} stroke="#fff" strokeWidth={2} />
+              <circle cx={x} cy={y} r={6} fill={rejected ? '#e03131' : color} stroke="#fff" strokeWidth={2.5} filter="url(#seqShadow)" />
               {rejected && (
                 <g stroke="#e03131" strokeWidth={3} strokeLinecap="round">
                   <line x1={x - 9} y1={y - 9} x2={x + 9} y2={y + 9} />
